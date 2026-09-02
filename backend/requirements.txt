@@ -2,3 +2,7 @@ fastapi
 uvicorn
 pytest
 httpx
+sqlalchemy
+alembic
+psycopg2-binary
+python-dotenv
