@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
+from typing import Literal
 
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -22,10 +23,26 @@ class DailyPriceRow:
     previous_close: float = 0.0
 
 
+@dataclass
+class UpsertResult:
+    inserted: int = 0
+    skipped: int = 0
+    replaced: int = 0
+
+
 class DailyPriceRepository(ABC):
     @abstractmethod
-    def upsert_many(self, rows: list[DailyPriceRow]) -> int:
-        """Insert or skip rows; returns count inserted."""
+    def upsert_many(
+        self,
+        rows: list[DailyPriceRow],
+        on_conflict: Literal["skip", "replace"] = "skip",
+    ) -> UpsertResult:
+        """Insert rows.
+
+        on_conflict="skip"    — silently skip rows that already exist (default).
+        on_conflict="replace" — overwrite existing rows with new values.
+        Returns an UpsertResult with per-outcome counts.
+        """
 
     @abstractmethod
     def get_by_symbol(self, symbol: str) -> list[DailyPrice]:
@@ -46,30 +63,55 @@ class PostgresDailyPriceRepository(DailyPriceRepository):
     def __init__(self, session: Session) -> None:
         self._session = session
 
-    def upsert_many(self, rows: list[DailyPriceRow]) -> int:
-        """Insert rows, skipping any that violate the (symbol, date) unique constraint."""
-        inserted = 0
+    def upsert_many(
+        self,
+        rows: list[DailyPriceRow],
+        on_conflict: Literal["skip", "replace"] = "skip",
+    ) -> UpsertResult:
+        result = UpsertResult()
         for row in rows:
-            price = DailyPrice(
-                symbol=row.symbol,
-                date=row.date,
-                open=row.open,
-                high=row.high,
-                low=row.low,
-                close=row.close,
-                volume=row.volume,
-                turnover=row.turnover,
-                change=row.change,
-                change_percent=row.change_percent,
-                previous_close=row.previous_close,
+            existing = (
+                self._session.query(DailyPrice)
+                .filter(DailyPrice.symbol == row.symbol, DailyPrice.date == row.date)
+                .first()
             )
-            self._session.add(price)
-            try:
-                self._session.flush()
-                inserted += 1
-            except IntegrityError:
-                self._session.rollback()
-        return inserted
+            if existing is not None:
+                if on_conflict == "replace":
+                    existing.open = row.open
+                    existing.high = row.high
+                    existing.low = row.low
+                    existing.close = row.close
+                    existing.volume = row.volume
+                    existing.turnover = row.turnover
+                    existing.change = row.change
+                    existing.change_percent = row.change_percent
+                    existing.previous_close = row.previous_close
+                    self._session.flush()
+                    result.replaced += 1
+                else:
+                    result.skipped += 1
+            else:
+                price = DailyPrice(
+                    symbol=row.symbol,
+                    date=row.date,
+                    open=row.open,
+                    high=row.high,
+                    low=row.low,
+                    close=row.close,
+                    volume=row.volume,
+                    turnover=row.turnover,
+                    change=row.change,
+                    change_percent=row.change_percent,
+                    previous_close=row.previous_close,
+                )
+                self._session.add(price)
+                try:
+                    self._session.flush()
+                    result.inserted += 1
+                except IntegrityError:
+                    self._session.rollback()
+                    result.skipped += 1
+        return result
 
     def get_by_symbol(self, symbol: str) -> list[DailyPrice]:
         return (

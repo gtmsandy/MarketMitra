@@ -132,7 +132,7 @@ class TestDailyPriceRepository:
         inserted = repo.upsert_many(rows)
         session.commit()
 
-        assert inserted == 2
+        assert inserted.inserted == 2
         results = repo.get_by_symbol("NABIL")
         assert len(results) == 2
         assert results[0].date == "2026-09-01"
@@ -176,8 +176,9 @@ class TestDailyPriceRepository:
         session.commit()
 
         # Insert same row again — should be skipped, not raise.
-        inserted = repo.upsert_many([row])
-        assert inserted == 0
+        result = repo.upsert_many([row])
+        assert result.skipped == 1
+        assert result.inserted == 0
 
     def test_get_latest_unknown_symbol_returns_none(self, session: Session) -> None:
         repo = PostgresDailyPriceRepository(session)

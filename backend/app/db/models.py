@@ -68,3 +68,23 @@ class DailyPrice(Base):
     )
 
     __table_args__ = (UniqueConstraint("symbol", "date", name="uq_daily_price_symbol_date"),)
+
+
+class IngestionRun(Base):
+    """Audit record for a single ingestion pipeline execution."""
+
+    __tablename__ = "ingestion_runs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    source: Mapped[str] = mapped_column(String, nullable=False)
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    finished_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    status: Mapped[str] = mapped_column(String, nullable=False)  # "success" | "failure"
+    instruments_upserted: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    snapshots_inserted: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    snapshots_skipped: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    prices_accepted: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    prices_skipped: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    prices_replaced: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    prices_rejected: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    error_detail: Mapped[str | None] = mapped_column(String, nullable=True)
