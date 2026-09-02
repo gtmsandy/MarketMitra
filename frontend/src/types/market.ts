@@ -38,3 +38,29 @@ export type StockQuote = {
   volume: number
   last_updated: string
 }
+
+export type PriceHistoryPoint = {
+  date: string
+  open: number
+  high: number
+  low: number
+  close: number
+  volume: number
+}
+
+export type StockDetail = {
+  symbol: string
+  company_name: string
+  ltp: number
+  change: number
+  change_percent: number
+  open: number
+  high: number
+  low: number
+  previous_close: number
+  volume: number
+  last_updated: string
+  fifty_two_week_high: number
+  fifty_two_week_low: number
+}
+

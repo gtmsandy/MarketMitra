@@ -4,10 +4,13 @@ from app.models.market import (
     MostActiveStock,
     StockQuote,
 )
+from app.models.stock import PriceHistoryPoint, StockDetail
 
 __all__ = [
     "MarketMover",
     "MarketOverview",
     "MostActiveStock",
+    "PriceHistoryPoint",
+    "StockDetail",
     "StockQuote",
 ]

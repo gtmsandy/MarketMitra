@@ -1,3 +1,5 @@
+import { Link } from 'react-router-dom'
+
 import type { MostActiveStock } from '../types/market'
 import { formatCompactNpr, formatInteger, formatNpr } from '../utils/formatters'
 
@@ -26,8 +28,10 @@ function MostActiveTable({ rows }: MostActiveTableProps) {
             {rows.map((stock) => (
               <tr key={stock.symbol}>
                 <th scope="row">
-                  <span className="stock-symbol">{stock.symbol}</span>
-                  <span className="company-name">{stock.company_name}</span>
+                  <Link className="stock-link" to={`/stocks/${stock.symbol}`}>
+                    <span className="stock-symbol">{stock.symbol}</span>
+                    <span className="company-name">{stock.company_name}</span>
+                  </Link>
                 </th>
                 <td>{formatNpr(stock.ltp)}</td>
                 <td>{formatInteger(stock.volume)}</td>
@@ -42,3 +46,4 @@ function MostActiveTable({ rows }: MostActiveTableProps) {
 }
 
 export default MostActiveTable
+

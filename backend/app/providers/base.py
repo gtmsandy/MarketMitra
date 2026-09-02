@@ -6,6 +6,7 @@ from app.models.market import (
     MostActiveStock,
     StockQuote,
 )
+from app.models.stock import PriceHistoryPoint, StockDetail
 
 
 class MarketDataProvider(ABC):
@@ -28,3 +29,15 @@ class MarketDataProvider(ABC):
     @abstractmethod
     def get_stocks(self) -> list[StockQuote]:
         """Return normalized stock quotes."""
+
+    @abstractmethod
+    def search_stocks(self, query: str) -> list[StockQuote]:
+        """Return stocks matching query by symbol or company name."""
+
+    @abstractmethod
+    def get_stock_detail(self, symbol: str) -> StockDetail | None:
+        """Return detail for a single stock, or None if not found."""
+
+    @abstractmethod
+    def get_stock_history(self, symbol: str) -> list[PriceHistoryPoint] | None:
+        """Return historical price data for a stock, or None if not found."""

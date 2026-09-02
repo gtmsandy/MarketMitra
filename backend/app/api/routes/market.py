@@ -44,5 +44,10 @@ def get_most_active(service: MarketServiceDependency) -> list[MostActiveStock]:
 
 
 @router.get("/stocks", response_model=list[StockQuote])
-def get_stocks(service: MarketServiceDependency) -> list[StockQuote]:
+def get_stocks(
+    service: MarketServiceDependency,
+    q: str | None = None,
+) -> list[StockQuote]:
+    if q:
+        return service.search_stocks(q)
     return service.get_stocks()

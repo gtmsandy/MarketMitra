@@ -1,3 +1,5 @@
+import { Link } from 'react-router-dom'
+
 import type { MarketMover } from '../types/market'
 import {
   formatInteger,
@@ -35,8 +37,10 @@ function MarketMoversTable({ title, rows }: MarketMoversTableProps) {
               return (
                 <tr key={stock.symbol}>
                   <th scope="row">
-                    <span className="stock-symbol">{stock.symbol}</span>
-                    <span className="company-name">{stock.company_name}</span>
+                    <Link className="stock-link" to={`/stocks/${stock.symbol}`}>
+                      <span className="stock-symbol">{stock.symbol}</span>
+                      <span className="company-name">{stock.company_name}</span>
+                    </Link>
                   </th>
                   <td>{formatNpr(stock.ltp)}</td>
                   <td className={`change change--${tone}`}>
@@ -54,3 +58,4 @@ function MarketMoversTable({ title, rows }: MarketMoversTableProps) {
 }
 
 export default MarketMoversTable
+

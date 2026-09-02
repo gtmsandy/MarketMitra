@@ -1,4 +1,6 @@
-from datetime import datetime, timedelta, timezone
+import hashlib
+import random
+from datetime import date, datetime, timedelta, timezone
 
 from app.models.market import (
     MarketMover,
@@ -6,11 +8,14 @@ from app.models.market import (
     MostActiveStock,
     StockQuote,
 )
+from app.models.stock import PriceHistoryPoint, StockDetail
 from app.providers.base import MarketDataProvider
 
 
 NEPAL_TIMEZONE = timezone(timedelta(hours=5, minutes=45))
 MOCK_LAST_UPDATED = datetime(2026, 9, 3, 11, 30, tzinfo=NEPAL_TIMEZONE)
+MOCK_END_DATE = date(2026, 9, 3)
+HISTORY_TRADING_DAYS = 180
 
 
 class MockMarketProvider(MarketDataProvider):
@@ -133,6 +138,9 @@ class MockMarketProvider(MarketDataProvider):
             "CHCL": 46_699_200.0,
             "SHIVM": 80_392_167.0,
         }
+        self._stock_by_symbol: dict[str, StockQuote] = {
+            stock.symbol: stock for stock in self._stocks
+        }
 
     def get_market_overview(self) -> MarketOverview:
         return MarketOverview(
@@ -170,6 +178,115 @@ class MockMarketProvider(MarketDataProvider):
     def get_stocks(self) -> list[StockQuote]:
         return list(self._stocks)
 
+    def search_stocks(self, query: str) -> list[StockQuote]:
+        if not query or not query.strip():
+            return list(self._stocks)
+        term = query.strip().lower()
+        return [
+            stock for stock in self._stocks
+            if term in stock.symbol.lower() or term in stock.company_name.lower()
+        ]
+
+    def get_stock_detail(self, symbol: str) -> StockDetail | None:
+        stock = self._stock_by_symbol.get(symbol.upper())
+        if stock is None:
+            return None
+        history = self._generate_price_history(stock.symbol, stock.ltp, stock.volume)
+        high_52w = max(p.high for p in history)
+        low_52w = min(p.low for p in history)
+        # Ensure the current day's high/low are included in the range.
+        high_52w = max(high_52w, stock.high)
+        low_52w = min(low_52w, stock.low)
+        return StockDetail(
+            symbol=stock.symbol,
+            company_name=stock.company_name,
+            ltp=stock.ltp,
+            change=stock.change,
+            change_percent=stock.change_percent,
+            open=stock.open,
+            high=stock.high,
+            low=stock.low,
+            previous_close=stock.previous_close,
+            volume=stock.volume,
+            last_updated=stock.last_updated,
+            fifty_two_week_high=round(high_52w, 2),
+            fifty_two_week_low=round(low_52w, 2),
+        )
+
+    def get_stock_history(self, symbol: str) -> list[PriceHistoryPoint] | None:
+        stock = self._stock_by_symbol.get(symbol.upper())
+        if stock is None:
+            return None
+        return self._generate_price_history(stock.symbol, stock.ltp, stock.volume)
+
+    @staticmethod
+    def _stable_seed(symbol: str) -> int:
+        """Derive a stable integer seed from a symbol using SHA-256."""
+        digest = hashlib.sha256(symbol.encode("utf-8")).hexdigest()
+        return int(digest, 16) % (2**31)
+
+    @staticmethod
+    def _trading_days(end: date, count: int) -> list[date]:
+        """Return `count` NEPSE trading days ending on or before `end`.
+
+        NEPSE trades Sunday–Thursday; Friday (weekday 4) and
+        Saturday (weekday 5) are holidays.
+        """
+        days: list[date] = []
+        current = end
+        while len(days) < count:
+            if current.weekday() not in (4, 5):
+                days.append(current)
+            current -= timedelta(days=1)
+        days.reverse()
+        return days
+
+    @staticmethod
+    def _generate_price_history(
+        symbol: str,
+        current_ltp: float,
+        base_volume: int,
+    ) -> list[PriceHistoryPoint]:
+        """Generate deterministic OHLCV history for a stock.
+
+        Uses SHA-256 of the symbol as seed so output is identical across
+        process restarts regardless of Python hash randomisation.
+        """
+        seed = MockMarketProvider._stable_seed(symbol)
+        rng = random.Random(seed)
+        days = MockMarketProvider._trading_days(MOCK_END_DATE, HISTORY_TRADING_DAYS)
+
+        # Walk forward from a starting price below the current LTP.
+        price = current_ltp * rng.uniform(0.72, 0.88)
+        points: list[PriceHistoryPoint] = []
+
+        for d in days:
+            daily_return = rng.gauss(0.001, 0.018)
+            close = max(price * (1 + daily_return), 1.0)
+
+            intraday_spread = rng.uniform(0.005, 0.025)
+            high = close * (1 + intraday_spread * rng.uniform(0.3, 1.0))
+            low = close * (1 - intraday_spread * rng.uniform(0.3, 1.0))
+            open_price = price * (1 + rng.uniform(-0.008, 0.008))
+
+            # Ensure OHLC consistency.
+            high = max(high, open_price, close)
+            low = min(low, open_price, close)
+
+            vol = max(1_000, int(rng.gauss(base_volume, base_volume * 0.35)))
+
+            points.append(PriceHistoryPoint(
+                date=d.isoformat(),
+                open=round(open_price, 2),
+                high=round(high, 2),
+                low=round(low, 2),
+                close=round(close, 2),
+                volume=vol,
+            ))
+            price = close
+
+        return points
+
     @staticmethod
     def _to_market_mover(stock: StockQuote) -> MarketMover:
         return MarketMover(
@@ -179,3 +296,4 @@ class MockMarketProvider(MarketDataProvider):
             change_percent=stock.change_percent,
             volume=stock.volume,
         )
+

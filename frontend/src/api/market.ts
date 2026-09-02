@@ -3,6 +3,8 @@ import type {
   MarketMover,
   MarketOverview,
   MostActiveStock,
+  PriceHistoryPoint,
+  StockDetail,
   StockQuote,
 } from '../types/market'
 
@@ -25,3 +27,16 @@ export function getMostActiveStocks(): Promise<MostActiveStock[]> {
 export function getStocks(): Promise<StockQuote[]> {
   return fetchJson('/api/v1/stocks')
 }
+
+export function searchStocks(query: string): Promise<StockQuote[]> {
+  return fetchJson(`/api/v1/stocks?q=${encodeURIComponent(query)}`)
+}
+
+export function getStockDetail(symbol: string): Promise<StockDetail> {
+  return fetchJson(`/api/v1/stocks/${encodeURIComponent(symbol)}`)
+}
+
+export function getStockHistory(symbol: string): Promise<PriceHistoryPoint[]> {
+  return fetchJson(`/api/v1/stocks/${encodeURIComponent(symbol)}/history`)
+}
+

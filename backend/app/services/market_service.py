@@ -4,6 +4,7 @@ from app.models.market import (
     MostActiveStock,
     StockQuote,
 )
+from app.models.stock import PriceHistoryPoint, StockDetail
 from app.providers.base import MarketDataProvider
 
 
@@ -25,3 +26,13 @@ class MarketService:
 
     def get_stocks(self) -> list[StockQuote]:
         return self._provider.get_stocks()
+
+    def search_stocks(self, query: str) -> list[StockQuote]:
+        return self._provider.search_stocks(query)
+
+    def get_stock_detail(self, symbol: str) -> StockDetail | None:
+        return self._provider.get_stock_detail(symbol)
+
+    def get_stock_history(self, symbol: str) -> list[PriceHistoryPoint] | None:
+        return self._provider.get_stock_history(symbol)
+
