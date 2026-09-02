@@ -2,23 +2,17 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends
 
+from app.api.dependencies import get_market_service
 from app.models.market import (
     MarketMover,
     MarketOverview,
     MostActiveStock,
     StockQuote,
 )
-from app.providers.mock_market import MockMarketProvider
 from app.services.market_service import MarketService
 
 
 router = APIRouter(tags=["market"])
-market_service = MarketService(MockMarketProvider())
-
-
-def get_market_service() -> MarketService:
-    return market_service
-
 
 MarketServiceDependency = Annotated[MarketService, Depends(get_market_service)]
 
