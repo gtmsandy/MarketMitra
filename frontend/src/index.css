@@ -1,0 +1,58 @@
+:root {
+  font-family: Inter, system-ui, sans-serif;
+  color: #152a22;
+  background: #f5f7f4;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+}
+
+main {
+  display: grid;
+  min-height: 100vh;
+  place-content: center;
+  padding: 2rem;
+  text-align: center;
+}
+
+h1 {
+  margin: 0;
+  font-size: clamp(2.5rem, 8vw, 4.5rem);
+}
+
+p {
+  margin: 0;
+}
+
+.eyebrow {
+  margin-bottom: 0.75rem;
+  color: #3f6e55;
+  font-size: 0.875rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.description {
+  margin-top: 0.75rem;
+  color: #53645b;
+}
+
+.connection {
+  margin-top: 2rem;
+  padding: 0.75rem 1rem;
+  border-radius: 0.5rem;
+  background: #e4eee7;
+}
+
+.connection--unavailable {
+  color: #8b2922;
+  background: #f9e2df;
+}
