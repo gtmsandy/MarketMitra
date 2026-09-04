@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 from sqlalchemy.orm import Session
 
 from app.models.market import (
@@ -87,12 +88,16 @@ class PostgresMarketProvider(MarketDataProvider):
 
     def get_stocks(self) -> list[StockQuote]:
         instruments = self._instruments.get_all()
+        latest_snapshot = self._snapshots.get_latest()
+        snapshot_timestamp = (
+            latest_snapshot.captured_at if latest_snapshot is not None else None
+        )
         quotes = []
         for instrument in instruments:
             price = self._prices.get_latest_by_symbol(instrument.symbol)
             if price is None:
                 continue
-            quotes.append(self._to_stock_quote(instrument, price))
+            quotes.append(self._to_stock_quote(instrument, price, snapshot_timestamp))
         return quotes
 
     def search_stocks(self, query: str) -> list[StockQuote]:
@@ -123,6 +128,12 @@ class PostgresMarketProvider(MarketDataProvider):
         high_52w = max(high_52w, price.high)
         low_52w = min(low_52w, price.low)
 
+        latest_snapshot = self._snapshots.get_latest()
+        if latest_snapshot is not None:
+            last_updated = latest_snapshot.captured_at
+        else:
+            last_updated = datetime.fromisoformat(f"{price.date}T00:00:00+00:00")
+
         return StockDetail(
             symbol=instrument.symbol,
             company_name=instrument.company_name,
@@ -134,7 +145,7 @@ class PostgresMarketProvider(MarketDataProvider):
             low=price.low,
             previous_close=price.previous_close,
             volume=price.volume,
-            last_updated=self._snapshots.get_latest().captured_at,  # type: ignore[union-attr]
+            last_updated=last_updated,
             fifty_two_week_high=round(high_52w, 2),
             fifty_two_week_low=round(low_52w, 2),
         )
@@ -181,10 +192,15 @@ class PostgresMarketProvider(MarketDataProvider):
         )
 
     @staticmethod
-    def _to_stock_quote(instrument, price) -> StockQuote:
-        from datetime import datetime, timezone
-        # last_updated sourced from the price date; real freshness tracking is Phase 3.
-        last_updated = datetime.now(tz=timezone.utc)
+    def _to_stock_quote(
+        instrument,
+        price,
+        snapshot_timestamp: datetime | None = None,
+    ) -> StockQuote:
+        if snapshot_timestamp is not None:
+            last_updated = snapshot_timestamp
+        else:
+            last_updated = datetime.fromisoformat(f"{price.date}T00:00:00+00:00")
         return StockQuote(
             symbol=instrument.symbol,
             company_name=instrument.company_name,

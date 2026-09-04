@@ -111,6 +111,41 @@ class TestMarketSnapshotRepository:
         repo = PostgresMarketSnapshotRepository(session)
         assert repo.get_latest() is None
 
+    def test_get_by_date_finds_snapshot_on_same_date(self, session: Session) -> None:
+        repo = PostgresMarketSnapshotRepository(session)
+        captured = datetime(2026, 9, 3, 11, 30, tzinfo=timezone.utc)
+        repo.insert(2786.42, 21.35, 0.77, 500000.0, 1000, 100, "Open", captured)
+        session.commit()
+
+        snapshot = repo.get_by_date("2026-09-03")
+        assert snapshot is not None
+        assert snapshot.captured_at.replace(tzinfo=timezone.utc) == captured
+        assert snapshot.nepse_index == 2786.42
+    def test_get_by_date_returns_none_for_different_date(self, session: Session) -> None:
+        repo = PostgresMarketSnapshotRepository(session)
+        captured = datetime(2026, 9, 3, 11, 30, tzinfo=timezone.utc)
+        repo.insert(2786.42, 21.35, 0.77, 500000.0, 1000, 100, "Open", captured)
+        session.commit()
+
+        assert repo.get_by_date("2026-09-02") is None
+        assert repo.get_by_date("2026-09-04") is None
+
+    def test_insert_if_new_day_deduplicates_by_date_range(self, session: Session) -> None:
+        repo = PostgresMarketSnapshotRepository(session)
+        c1 = datetime(2026, 9, 3, 11, 30, tzinfo=timezone.utc)
+        s1, inserted1 = repo.insert_if_new_day(
+            2786.42, 21.35, 0.77, 500000.0, 1000, 100, "Open", c1
+        )
+        session.commit()
+        assert inserted1 is True
+
+        c2 = datetime(2026, 9, 3, 14, 45, tzinfo=timezone.utc)
+        s2, inserted2 = repo.insert_if_new_day(
+            2790.0, 25.0, 0.9, 600000.0, 1200, 120, "Open", c2
+        )
+        session.commit()
+        assert inserted2 is False
+        assert s2.id == s1.id
 
 # ---------------------------------------------------------------------------
 # DailyPriceRepository

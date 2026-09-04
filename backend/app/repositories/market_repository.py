@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from datetime import datetime
+from datetime import date, datetime, time, timedelta, timezone
 
 from sqlalchemy.orm import Session
 
@@ -119,14 +119,14 @@ class PostgresMarketSnapshotRepository(MarketSnapshotRepository):
 
     def get_by_date(self, date_str: str) -> MarketSnapshot | None:
         """Return the first snapshot whose captured_at matches the given date string."""
-        # ISO date prefix match: captured_at cast to string starts with YYYY-MM-DD.
-        # Using SQLAlchemy's func.strftime for SQLite compat; on Postgres this is
-        # equivalent to DATE(captured_at)::text = date_str.
-        from sqlalchemy import func
+        target_date = date.fromisoformat(date_str)
+        start_dt = datetime.combine(target_date, time.min, tzinfo=timezone.utc)
+        end_dt = start_dt + timedelta(days=1)
         return (
             self._session.query(MarketSnapshot)
             .filter(
-                func.strftime("%Y-%m-%d", MarketSnapshot.captured_at) == date_str
+                MarketSnapshot.captured_at >= start_dt,
+                MarketSnapshot.captured_at < end_dt,
             )
             .first()
         )

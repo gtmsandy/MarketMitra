@@ -172,7 +172,18 @@ class TestPostgresMarketProviderStocks:
             assert stock.company_name
             assert stock.ltp > 0
 
-    def test_search_stocks_by_symbol(self, seeded_session: Session) -> None:
+    def test_stock_quote_timestamp_matches_persisted_snapshot(
+        self, seeded_session: Session
+    ) -> None:
+        provider = PostgresMarketProvider(seeded_session)
+        latest_snapshot = PostgresMarketSnapshotRepository(seeded_session).get_latest()
+        assert latest_snapshot is not None
+
+        stocks = provider.get_stocks()
+        assert len(stocks) > 0
+        for stock in stocks:
+            assert stock.last_updated == latest_snapshot.captured_at
+
         provider = PostgresMarketProvider(seeded_session)
         results = provider.search_stocks("NAB")
         symbols = [r.symbol for r in results]
@@ -204,7 +215,36 @@ class TestPostgresMarketProviderStockDetail:
         provider = PostgresMarketProvider(seeded_session)
         assert provider.get_stock_detail("NONEXIST") is None
 
+    def test_stock_detail_without_snapshot_does_not_crash(
+        self, session: Session
+    ) -> None:
+        inst_repo = PostgresInstrumentRepository(session)
+        inst_repo.upsert("NABIL", "Nabil Bank Limited")
 
+        price_repo = PostgresDailyPriceRepository(session)
+        price_repo.upsert_many([
+            DailyPriceRow(
+                symbol="NABIL",
+                date="2026-09-03",
+                open=500.0,
+                high=510.0,
+                low=495.0,
+                close=505.0,
+                volume=10000,
+                turnover=5050000.0,
+                change=5.0,
+                change_percent=1.0,
+                previous_close=500.0,
+            )
+        ])
+        session.commit()
+
+        provider = PostgresMarketProvider(session)
+        detail = provider.get_stock_detail("NABIL")
+        assert detail is not None
+        assert detail.symbol == "NABIL"
+        assert detail.ltp == 505.0
+        assert detail.last_updated == datetime(2026, 9, 3, 0, 0, tzinfo=timezone.utc)
 class TestPostgresMarketProviderHistory:
     def test_returns_history(self, seeded_session: Session) -> None:
         provider = PostgresMarketProvider(seeded_session)
