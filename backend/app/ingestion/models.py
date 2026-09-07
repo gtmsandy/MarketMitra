@@ -24,11 +24,11 @@ class RawSnapshotRecord:
     nepse_index: float
     index_change: float
     index_change_percent: float
-    turnover: float
-    total_volume: int
-    total_transactions: int
-    market_status: str
-    captured_at: datetime
+    turnover: float | None = None
+    total_volume: int | None = None
+    total_transactions: int | None = None
+    market_status: str = "CLOSED"
+    captured_at: datetime | None = None
 
 
 @dataclass
@@ -63,6 +63,25 @@ class PriceValidationResult:
     valid: list[RawPriceRecord] = field(default_factory=list)
     rejected: list[tuple[RawPriceRecord, list[ValidationError]]] = field(default_factory=list)
 
+    @property
+    def total_processed(self) -> int:
+        return len(self.valid) + len(self.rejected)
+
+    @property
+    def accepted_count(self) -> int:
+        return len(self.valid)
+
+    @property
+    def rejected_count(self) -> int:
+        return len(self.rejected)
+
+    @property
+    def rejection_reason_counts(self) -> dict[str, int]:
+        counts: dict[str, int] = {}
+        for _, errors in self.rejected:
+            for err in errors:
+                counts[err.rule] = counts.get(err.rule, 0) + 1
+        return counts
 
 # ---------------------------------------------------------------------------
 # Ingestion report  (returned by IngestionService.run())

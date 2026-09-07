@@ -20,3 +20,9 @@ coverage/
 .vscode/
 .idea/
 *.log
+
+# Local datasets
+data/
+
+# Backup files
+*.backup

@@ -24,12 +24,12 @@ function StockSearch() {
     searchStocks(debouncedQuery).then((data) => {
       if (!cancelled) {
         setResults(data)
-        setIsOpen(data.length > 0)
+        setIsOpen(true)
       }
     }).catch(() => {
       if (!cancelled) {
         setResults([])
-        setIsOpen(false)
+        setIsOpen(true)
       }
     })
 
@@ -68,23 +68,30 @@ function StockSearch() {
         placeholder="Search stocks…"
         value={query}
         onChange={(e) => setQuery(e.target.value)}
+        onFocus={() => {
+          if (query.trim()) setIsOpen(true)
+        }}
         onKeyDown={handleKeyDown}
         aria-label="Search stocks by symbol or company name"
       />
-      {isOpen && results.length > 0 && (
+      {isOpen && (
         <ul className="stock-search__results" role="listbox">
-          {results.map((stock) => (
-            <li key={stock.symbol} role="option">
-              <button
-                className="stock-search__result"
-                type="button"
-                onClick={() => handleSelect(stock.symbol)}
-              >
-                <span className="stock-search__symbol">{stock.symbol}</span>
-                <span className="stock-search__name">{stock.company_name}</span>
-              </button>
-            </li>
-          ))}
+          {results.length > 0 ? (
+            results.slice(0, 10).map((stock) => (
+              <li key={stock.symbol} role="option">
+                <button
+                  className="stock-search__result"
+                  type="button"
+                  onClick={() => handleSelect(stock.symbol)}
+                >
+                  <span className="stock-search__symbol">{stock.symbol}</span>
+                  <span className="stock-search__name">{stock.company_name}</span>
+                </button>
+              </li>
+            ))
+          ) : (
+            <li className="stock-search__empty">No stocks matching &quot;{debouncedQuery}&quot;</li>
+          )}
         </ul>
       )}
     </div>

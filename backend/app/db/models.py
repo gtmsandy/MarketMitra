@@ -32,9 +32,9 @@ class MarketSnapshot(Base):
     nepse_index: Mapped[float] = mapped_column(Float, nullable=False)
     index_change: Mapped[float] = mapped_column(Float, nullable=False)
     index_change_percent: Mapped[float] = mapped_column(Float, nullable=False)
-    turnover: Mapped[float] = mapped_column(Float, nullable=False)
-    total_volume: Mapped[int] = mapped_column(Integer, nullable=False)
-    total_transactions: Mapped[int] = mapped_column(Integer, nullable=False)
+    turnover: Mapped[float | None] = mapped_column(Float, nullable=True)
+    total_volume: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    total_transactions: Mapped[int | None] = mapped_column(Integer, nullable=True)
     market_status: Mapped[str] = mapped_column(String, nullable=False)
     captured_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, index=True

@@ -2,9 +2,9 @@ export type MarketOverview = {
   nepse_index: number
   index_change: number
   index_change_percent: number
-  turnover: number
-  total_volume: number
-  total_transactions: number
+  turnover: number | null
+  total_volume: number | null
+  total_transactions: number | null
   market_status: string
   last_updated: string
 }

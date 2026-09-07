@@ -29,10 +29,10 @@ function AppHeader({ overview }: AppHeaderProps) {
               Market {overview.market_status}
             </span>
             <span>Last Updated {formatDateTime(overview.last_updated)}</span>
-            <span>Sample data</span>
+            <span>Database records</span>
           </>
         ) : (
-          <span>Sample data</span>
+          <span>Database records</span>
         )}
       </div>
     </header>

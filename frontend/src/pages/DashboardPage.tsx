@@ -82,7 +82,7 @@ function DashboardPage({ onOverviewLoaded }: DashboardPageProps) {
             <p className="section-heading__eyebrow">Market Overview</p>
             <h1 id="market-overview-heading">NEPSE Market Summary</h1>
           </div>
-          <p>Current values reflect the configured sample market provider.</p>
+          <p>Current values reflect latest database-backed market records.</p>
         </div>
         <div className="metric-grid">
           <MarketMetricCard
@@ -94,26 +94,26 @@ function DashboardPage({ onOverviewLoaded }: DashboardPageProps) {
           />
           <MarketMetricCard
             label="Turnover"
-            value={formatCompactNpr(overview.turnover)}
+            value={overview.turnover !== null ? formatCompactNpr(overview.turnover) : "—"}
             detail="Total traded value"
           />
           <MarketMetricCard
             label="Total Volume"
-            value={formatInteger(overview.total_volume)}
+            value={overview.total_volume !== null ? formatInteger(overview.total_volume) : "—"}
             detail="Shares traded"
           />
           <MarketMetricCard
             label="Transactions"
-            value={formatInteger(overview.total_transactions)}
+            value={overview.total_transactions !== null ? formatInteger(overview.total_transactions) : "—"}
             detail="Completed trades"
           />
         </div>
       </section>
 
       <section className="market-tables" aria-label="Market activity">
-        <MarketMoversTable title="Top Gainers" rows={gainers} />
-        <MarketMoversTable title="Top Losers" rows={losers} />
-        <MostActiveTable rows={mostActive} />
+        <MarketMoversTable title="Top Gainers" rows={gainers} limit={10} />
+        <MarketMoversTable title="Top Losers" rows={losers} limit={10} />
+        <MostActiveTable rows={mostActive} limit={15} />
       </section>
     </main>
   )

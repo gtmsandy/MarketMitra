@@ -130,13 +130,13 @@ function StockDetailPage() {
         <section className="stock-detail-chart" aria-label="Price history">
           <div className="stock-detail-chart__heading">
             <h2>Price History</h2>
-            <span>Sample data · Closing price</span>
+            <span>Database records · Closing price</span>
           </div>
           <PriceChart data={history} />
         </section>
 
         <p className="stock-detail-footer">
-          Last Updated {formatDateTime(detail.last_updated)} · Sample data
+          Last Updated {formatDateTime(detail.last_updated)} · Database records
         </p>
       </div>
     </main>

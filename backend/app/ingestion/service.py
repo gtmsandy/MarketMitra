@@ -35,16 +35,19 @@ class IngestionService:
         source: DataSource,
         session: Session,
         on_conflict: Literal["skip", "replace"] = "skip",
+        validation_mode: Literal["strict", "historical"] = "strict",
+        dry_run: bool = False,
     ) -> None:
         self._source = source
         self._session = session
         self._on_conflict = on_conflict
+        self._validation_mode = validation_mode
+        self._dry_run = dry_run
         self._validator = IngestionValidator()
         self._instruments = PostgresInstrumentRepository(session)
         self._snapshots = PostgresMarketSnapshotRepository(session)
         self._prices = PostgresDailyPriceRepository(session)
         self._runs = PostgresIngestionRunRepository(session)
-
     def run(self) -> IngestionReport:
         """Execute a full ingestion run and return a structured report."""
         started_at = datetime.now(tz=timezone.utc)
@@ -88,35 +91,43 @@ class IngestionService:
         report.instruments_upserted = len(raw_instruments)
 
         # --- 2. Snapshot ------------------------------------------------------
-        raw_snapshot = self._source.fetch_snapshot()
-        snapshot_errors = self._validator.validate_snapshot(raw_snapshot)
-        if not snapshot_errors:
-            _, was_inserted = self._snapshots.insert_if_new_day(
-                nepse_index=raw_snapshot.nepse_index,
-                index_change=raw_snapshot.index_change,
-                index_change_percent=raw_snapshot.index_change_percent,
-                turnover=raw_snapshot.turnover,
-                total_volume=raw_snapshot.total_volume,
-                total_transactions=raw_snapshot.total_transactions,
-                market_status=raw_snapshot.market_status,
-                captured_at=raw_snapshot.captured_at,
-            )
-            self._session.flush()
-            if was_inserted:
-                report.snapshots_inserted = 1
-            else:
-                report.snapshots_skipped = 1
+        raw_snapshots = self._source.fetch_snapshots()
 
+        for raw_snapshot in raw_snapshots:
+            snapshot_errors = self._validator.validate_snapshot(raw_snapshot)
+            if not snapshot_errors:
+                _, was_inserted = self._snapshots.insert_if_new_day(
+                    nepse_index=raw_snapshot.nepse_index,
+                    index_change=raw_snapshot.index_change,
+                    index_change_percent=raw_snapshot.index_change_percent,
+                    turnover=raw_snapshot.turnover,
+                    total_volume=raw_snapshot.total_volume,
+                    total_transactions=raw_snapshot.total_transactions,
+                    market_status=raw_snapshot.market_status,
+                    captured_at=raw_snapshot.captured_at,
+                )
+                if was_inserted:
+                    report.snapshots_inserted += 1
+                else:
+                    report.snapshots_skipped += 1
+
+        self._session.flush()
         # --- 3. Prices --------------------------------------------------------
         all_rejection_summaries: list[str] = []
 
-        for instrument in self._instruments.get_all():
+        source_symbols = {rec.symbol for rec in raw_instruments}
+        target_instruments = [
+            inst for inst in self._instruments.get_all() if inst.symbol in source_symbols
+        ]
+
+        for idx, instrument in enumerate(target_instruments, start=1):
             raw_prices = self._source.fetch_prices(instrument.symbol)
             if not raw_prices:
                 continue
 
-            validation_result = self._validator.validate_prices(raw_prices)
-
+            validation_result = self._validator.validate_prices(
+                raw_prices, mode=self._validation_mode
+            )
             # Collect rejection summaries for the report
             for rejected_record, errors in validation_result.rejected:
                 summary = self._format_rejection(rejected_record, errors)
@@ -131,12 +142,19 @@ class IngestionService:
                 report.prices_skipped += upsert_result.skipped
                 report.prices_replaced += upsert_result.replaced
 
+            if idx % 25 == 0:
+                self._session.flush()
+
         report.rejection_summary = all_rejection_summaries
 
         # --- 4. Audit record --------------------------------------------------
         report.finished_at = datetime.now(tz=timezone.utc)
-        self._runs.record(report)
-        self._session.commit()
+        if self._dry_run:
+            self._session.rollback()
+            report.status = "dry_run"
+        else:
+            self._runs.record(report)
+            self._session.commit()
 
         return report
 

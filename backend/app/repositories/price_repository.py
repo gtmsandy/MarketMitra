@@ -69,12 +69,21 @@ class PostgresDailyPriceRepository(DailyPriceRepository):
         on_conflict: Literal["skip", "replace"] = "skip",
     ) -> UpsertResult:
         result = UpsertResult()
+        if not rows:
+            return result
+
+        # Optimization: batch-load existing records for involved symbols in one query
+        symbols = set(r.symbol for r in rows)
+        existing_records = (
+            self._session.query(DailyPrice)
+            .filter(DailyPrice.symbol.in_(symbols))
+            .all()
+        )
+        existing_map = {(p.symbol, p.date): p for p in existing_records}
+
         for row in rows:
-            existing = (
-                self._session.query(DailyPrice)
-                .filter(DailyPrice.symbol == row.symbol, DailyPrice.date == row.date)
-                .first()
-            )
+            key = (row.symbol, row.date)
+            existing = existing_map.get(key)
             if existing is not None:
                 if on_conflict == "replace":
                     existing.open = row.open
@@ -86,7 +95,6 @@ class PostgresDailyPriceRepository(DailyPriceRepository):
                     existing.change = row.change
                     existing.change_percent = row.change_percent
                     existing.previous_close = row.previous_close
-                    self._session.flush()
                     result.replaced += 1
                 else:
                     result.skipped += 1
@@ -105,12 +113,10 @@ class PostgresDailyPriceRepository(DailyPriceRepository):
                     previous_close=row.previous_close,
                 )
                 self._session.add(price)
-                try:
-                    self._session.flush()
-                    result.inserted += 1
-                except IntegrityError:
-                    self._session.rollback()
-                    result.skipped += 1
+                existing_map[key] = price
+                result.inserted += 1
+
+        self._session.flush()
         return result
 
     def get_by_symbol(self, symbol: str) -> list[DailyPrice]:

@@ -106,12 +106,38 @@ class TestPostgresMarketProviderOverview:
         assert overview.turnover > 0
         assert isinstance(overview.last_updated, datetime)
 
+    def test_get_market_overview_with_nullable_metrics(self, session: Session) -> None:
+        """Provider must handle snapshots where turnover, volume, and transactions are None."""
+        repo = PostgresMarketSnapshotRepository(session)
+        repo.insert(
+            nepse_index=2846.3,
+            index_change=-30.36,
+            index_change_percent=-1.05,
+            turnover=None,
+            total_volume=None,
+            total_transactions=None,
+            market_status="CLOSED",
+            captured_at=datetime(2025, 3, 4, 15, 0, tzinfo=timezone.utc),
+        )
+        session.commit()
+
+        provider = PostgresMarketProvider(session)
+        overview = provider.get_market_overview()
+
+        assert overview.nepse_index == 2846.3
+        assert overview.index_change == -30.36
+        assert overview.index_change_percent == -1.05
+        assert overview.market_status == "CLOSED"
+        assert overview.turnover is None
+        assert overview.total_volume is None
+        assert overview.total_transactions is None
+        assert overview.last_updated.replace(tzinfo=timezone.utc) == datetime(2025, 3, 4, 15, 0, tzinfo=timezone.utc)
+
     def test_get_market_overview_no_data_raises(self, session: Session) -> None:
         """Provider must raise clearly when no snapshot exists."""
         provider = PostgresMarketProvider(session)
         with pytest.raises(RuntimeError, match="No market snapshot found"):
             provider.get_market_overview()
-
 
 class TestPostgresMarketProviderGainersLosers:
     def test_gainers_all_positive(self, seeded_session: Session) -> None:

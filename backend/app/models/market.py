@@ -7,9 +7,9 @@ class MarketOverview(BaseModel):
     nepse_index: float
     index_change: float
     index_change_percent: float
-    turnover: float
-    total_volume: int
-    total_transactions: int
+    turnover: float | None = None
+    total_volume: int | None = None
+    total_transactions: int | None = None
     market_status: str
     last_updated: datetime
 

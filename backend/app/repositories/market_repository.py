@@ -13,11 +13,11 @@ class MarketSnapshotRepository(ABC):
         nepse_index: float,
         index_change: float,
         index_change_percent: float,
-        turnover: float,
-        total_volume: int,
-        total_transactions: int,
-        market_status: str,
-        captured_at: datetime,
+        turnover: float | None = None,
+        total_volume: int | None = None,
+        total_transactions: int | None = None,
+        market_status: str = "CLOSED",
+        captured_at: datetime | None = None,
     ) -> MarketSnapshot:
         """Insert a new market snapshot."""
 
@@ -27,11 +27,11 @@ class MarketSnapshotRepository(ABC):
         nepse_index: float,
         index_change: float,
         index_change_percent: float,
-        turnover: float,
-        total_volume: int,
-        total_transactions: int,
-        market_status: str,
-        captured_at: datetime,
+        turnover: float | None = None,
+        total_volume: int | None = None,
+        total_transactions: int | None = None,
+        market_status: str = "CLOSED",
+        captured_at: datetime | None = None,
     ) -> tuple[MarketSnapshot, bool]:
         """Insert snapshot only if no snapshot exists for the same calendar date.
 
@@ -57,12 +57,13 @@ class PostgresMarketSnapshotRepository(MarketSnapshotRepository):
         nepse_index: float,
         index_change: float,
         index_change_percent: float,
-        turnover: float,
-        total_volume: int,
-        total_transactions: int,
-        market_status: str,
-        captured_at: datetime,
+        turnover: float | None = None,
+        total_volume: int | None = None,
+        total_transactions: int | None = None,
+        market_status: str = "CLOSED",
+        captured_at: datetime | None = None,
     ) -> MarketSnapshot:
+        effective_captured_at = captured_at or datetime.now(tz=timezone.utc)
         snapshot = MarketSnapshot(
             nepse_index=nepse_index,
             index_change=index_change,
@@ -71,7 +72,7 @@ class PostgresMarketSnapshotRepository(MarketSnapshotRepository):
             total_volume=total_volume,
             total_transactions=total_transactions,
             market_status=market_status,
-            captured_at=captured_at,
+            captured_at=effective_captured_at,
         )
         self._session.add(snapshot)
         return snapshot
@@ -81,19 +82,14 @@ class PostgresMarketSnapshotRepository(MarketSnapshotRepository):
         nepse_index: float,
         index_change: float,
         index_change_percent: float,
-        turnover: float,
-        total_volume: int,
-        total_transactions: int,
-        market_status: str,
-        captured_at: datetime,
+        turnover: float | None = None,
+        total_volume: int | None = None,
+        total_transactions: int | None = None,
+        market_status: str = "CLOSED",
+        captured_at: datetime | None = None,
     ) -> tuple[MarketSnapshot, bool]:
-        """Insert snapshot only if the calendar date has no existing snapshot.
-
-        Deduplication is by date string (YYYY-MM-DD) derived from captured_at.
-        This prevents identical snapshots from accumulating on repeated runs
-        while still allowing snapshots on different days.
-        """
-        date_str = captured_at.strftime("%Y-%m-%d")
+        effective_captured_at = captured_at or datetime.now(tz=timezone.utc)
+        date_str = effective_captured_at.strftime("%Y-%m-%d")
         existing = self.get_by_date(date_str)
         if existing is not None:
             return existing, False
@@ -106,7 +102,7 @@ class PostgresMarketSnapshotRepository(MarketSnapshotRepository):
             total_volume=total_volume,
             total_transactions=total_transactions,
             market_status=market_status,
-            captured_at=captured_at,
+            captured_at=effective_captured_at,
         )
         return snapshot, True
 

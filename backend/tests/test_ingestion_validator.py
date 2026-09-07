@@ -70,6 +70,51 @@ class TestPriceValidationValid:
         assert len(result.rejected) == 1
 
 
+
+# ---------------------------------------------------------------------------
+# Validation mode compatibility
+# ---------------------------------------------------------------------------
+
+class TestValidationModeCompatibility:
+    def test_default_mode_is_strict(self, validator: IngestionValidator) -> None:
+        """validate_prices() without mode defaults to strict validation."""
+        record = _valid_price(open=530.0, high=520.0, low=500.0, close=515.0)
+        result_default = validator.validate_prices([record])
+        result_strict = validator.validate_prices([record], mode="strict")
+
+        assert len(result_default.rejected) == 1
+        assert len(result_strict.rejected) == 1
+        assert [e.rule for e in result_default.rejected[0][1]] == [
+            e.rule for e in result_strict.rejected[0][1]
+        ]
+
+    def test_validate_prices_accepts_mode_as_keyword(self, validator: IngestionValidator) -> None:
+        """Service calls validator.validate_prices(records, mode=...) as keyword argument."""
+        record = _valid_price()
+        result_strict = validator.validate_prices([record], mode="strict")
+        result_historical = validator.validate_prices([record], mode="historical")
+        assert len(result_strict.valid) == 1
+        assert len(result_historical.valid) == 1
+
+    def test_validate_prices_accepts_mode_as_positional(self, validator: IngestionValidator) -> None:
+        """Positional mode argument is also supported."""
+        record = _valid_price()
+        result = validator.validate_prices([record], "strict")
+        assert len(result.valid) == 1
+
+    def test_invalid_mode_raises_value_error(self, validator: IngestionValidator) -> None:
+        """Unrecognized validation mode raises ValueError."""
+        with pytest.raises(ValueError, match="Invalid validation mode"):
+            validator.validate_prices([_valid_price()], mode="unsupported")  # type: ignore[arg-type]
+
+    def test_mode_passed_to_per_record_validation(self, validator: IngestionValidator) -> None:
+        """Mode is propagated to each record: open outside range is allowed in historical only."""
+        record = _valid_price(open=530.0, high=520.0, low=500.0, close=515.0)
+        res_strict = validator.validate_prices([record], mode="strict")
+        res_historical = validator.validate_prices([record], mode="historical")
+        assert len(res_strict.rejected) == 1
+        assert len(res_historical.valid) == 1
+
 # ---------------------------------------------------------------------------
 # Symbol validation
 # ---------------------------------------------------------------------------
@@ -128,38 +173,78 @@ class TestDateValidation:
         result = validator.validate_prices([_valid_price(date="2026-08-30")])
         assert len(result.valid) == 1
 
+    def test_friday_accepted_in_historical_mode(self, validator: IngestionValidator) -> None:
+        result = validator.validate_prices([_valid_price(date="2022-05-20")], mode="historical")
+        assert len(result.valid) == 1
+
+    def test_saturday_rejected_in_historical_mode(self, validator: IngestionValidator) -> None:
+        result = validator.validate_prices([_valid_price(date="2022-05-21")], mode="historical")
+        assert len(result.rejected) == 1
+        assert "date_not_weekend" in [e.rule for e in result.rejected[0][1]]
 
 # ---------------------------------------------------------------------------
 # OHLC validation
 # ---------------------------------------------------------------------------
 
 class TestOHLCValidation:
-    def test_high_less_than_low_rejected(self, validator: IngestionValidator) -> None:
-        result = validator.validate_prices([_valid_price(high=490.0, low=510.0)])
-        rules = [e.rule for e in result.rejected[0][1]]
-        assert "ohlc_consistency" in rules
+    def test_strict_rejects_close_greater_than_high(self, validator: IngestionValidator) -> None:
+        result = validator.validate_prices([_valid_price(high=510.0, close=520.0)], mode="strict")
+        assert len(result.rejected) == 1
+        assert "ohlc_consistency" in [e.rule for e in result.rejected[0][1]]
 
-    def test_high_less_than_open_rejected(self, validator: IngestionValidator) -> None:
-        result = validator.validate_prices([_valid_price(open=530.0, high=520.0)])
-        rules = [e.rule for e in result.rejected[0][1]]
-        assert "ohlc_consistency" in rules
+    def test_strict_rejects_close_less_than_low(self, validator: IngestionValidator) -> None:
+        result = validator.validate_prices([_valid_price(low=510.0, close=500.0)], mode="strict")
+        assert len(result.rejected) == 1
+        assert "ohlc_consistency" in [e.rule for e in result.rejected[0][1]]
 
-    def test_high_less_than_close_rejected(self, validator: IngestionValidator) -> None:
+    def test_strict_rejects_open_greater_than_high(self, validator: IngestionValidator) -> None:
+        result = validator.validate_prices([_valid_price(open=530.0, high=520.0)], mode="strict")
+        assert len(result.rejected) == 1
+        assert "ohlc_consistency" in [e.rule for e in result.rejected[0][1]]
+
+    def test_strict_rejects_open_less_than_low(self, validator: IngestionValidator) -> None:
+        result = validator.validate_prices([_valid_price(low=510.0, open=490.0)], mode="strict")
+        assert len(result.rejected) == 1
+        assert "ohlc_consistency" in [e.rule for e in result.rejected[0][1]]
+
+    def test_historical_accepts_legacy_close_outside_range(self, validator: IngestionValidator) -> None:
+        # close > high (e.g. ADBLD83 2025-04-07: open=1090, high=1090, low=1090, ltp/close=1111.70)
+        res_above = validator.validate_prices(
+            [_valid_price(open=1090.0, high=1090.0, low=1090.0, close=1111.70)], mode="historical"
+        )
+        assert len(res_above.valid) == 1
+        # close < low
+        res_below = validator.validate_prices(
+            [_valid_price(open=510.0, high=520.0, low=500.0, close=490.0)], mode="historical"
+        )
+        assert len(res_below.valid) == 1
+
+    def test_historical_accepts_legacy_open_outside_range(self, validator: IngestionValidator) -> None:
+        # open > high
+        res_above = validator.validate_prices(
+            [_valid_price(open=530.0, high=520.0, low=500.0, close=515.0)], mode="historical"
+        )
+        assert len(res_above.valid) == 1
+        # open < low
+        res_below = validator.validate_prices(
+            [_valid_price(open=480.0, high=520.0, low=500.0, close=515.0)], mode="historical"
+        )
+        assert len(res_below.valid) == 1
+
+    def test_both_modes_reject_high_less_than_low(self, validator: IngestionValidator) -> None:
+        res_strict = validator.validate_prices([_valid_price(high=490.0, low=510.0)], mode="strict")
+        assert len(res_strict.rejected) == 1
+        assert "ohlc_consistency" in [e.rule for e in res_strict.rejected[0][1]]
+
+        res_historical = validator.validate_prices([_valid_price(high=490.0, low=510.0)], mode="historical")
+        assert len(res_historical.rejected) == 1
+        assert "ohlc_consistency" in [e.rule for e in res_historical.rejected[0][1]]
+
+    def test_default_mode_rejects_close_outside_high_low(self, validator: IngestionValidator) -> None:
+        # Default mode is strict
         result = validator.validate_prices([_valid_price(high=510.0, close=520.0)])
-        rules = [e.rule for e in result.rejected[0][1]]
-        assert "ohlc_consistency" in rules
-
-    def test_low_greater_than_open_rejected(self, validator: IngestionValidator) -> None:
-        result = validator.validate_prices([_valid_price(low=510.0, open=490.0)])
-        rules = [e.rule for e in result.rejected[0][1]]
-        assert "ohlc_consistency" in rules
-
-    def test_low_greater_than_close_rejected(self, validator: IngestionValidator) -> None:
-        result = validator.validate_prices([_valid_price(low=520.0, close=510.0)])
-        rules = [e.rule for e in result.rejected[0][1]]
-        assert "ohlc_consistency" in rules
-
-
+        assert len(result.rejected) == 1
+        assert "ohlc_consistency" in [e.rule for e in result.rejected[0][1]]
 # ---------------------------------------------------------------------------
 # Price positivity
 # ---------------------------------------------------------------------------
@@ -177,6 +262,15 @@ class TestPricePositivity:
         rules = [e.rule for e in result.rejected[0][1]]
         assert "price_positive" in rules
 
+    @pytest.mark.parametrize("field", ["open", "high", "low", "close"])
+    def test_historical_mode_rejects_nonpositive_price(
+        self, validator: IngestionValidator, field: str
+    ) -> None:
+        res_zero = validator.validate_prices([_valid_price(**{field: 0.0})], mode="historical")
+        assert "price_positive" in [e.rule for e in res_zero.rejected[0][1]]
+
+        res_neg = validator.validate_prices([_valid_price(**{field: -10.0})], mode="historical")
+        assert "price_positive" in [e.rule for e in res_neg.rejected[0][1]]
 
 # ---------------------------------------------------------------------------
 # Volume and turnover
@@ -241,3 +335,8 @@ class TestSnapshotValidation:
         errors = validator.validate_snapshot(_valid_snapshot(market_status=""))
         rules = [e.rule for e in errors]
         assert "snapshot_status_nonempty" in rules
+    def test_snapshot_with_none_metrics_passes(self, validator: IngestionValidator) -> None:
+        errors = validator.validate_snapshot(
+            _valid_snapshot(turnover=None, total_volume=None, total_transactions=None)
+        )
+        assert errors == []
