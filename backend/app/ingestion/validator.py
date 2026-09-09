@@ -20,8 +20,9 @@ from app.ingestion.models import (
 _NEPSE_HOLIDAYS = {4, 5}
 
 _DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
-_SYMBOL_RE = re.compile(r"^[A-Z0-9]{1,10}$")
-
+_STRICT_SYMBOL_RE = re.compile(r"^[A-Z0-9]{1,10}$")
+_HISTORICAL_SYMBOL_RE = re.compile(r"^[A-Z0-9_]{1,12}$")
+_SYMBOL_RE = _STRICT_SYMBOL_RE
 ValidationMode = Literal["strict", "historical"]
 
 
@@ -35,7 +36,7 @@ class IngestionValidator:
     def validate_prices(
         self,
         records: list[RawPriceRecord],
-        mode: ValidationMode = "strict",
+        mode: Literal["strict", "historical"] = "strict",
     ) -> PriceValidationResult:
         """Validate a batch of price records.
 
@@ -81,20 +82,32 @@ class IngestionValidator:
     ) -> list[ValidationError]:
         """Validate one raw price record."""
 
+        if mode not in ("strict", "historical"):
+            raise ValueError(
+                f"Invalid validation mode {mode!r}. "
+                "Must be 'strict' or 'historical'."
+            )
+
         errors: list[ValidationError] = []
 
         # --------------------------------------------------------------
         # Symbol validation
         # --------------------------------------------------------------
 
-        if not _SYMBOL_RE.match(record.symbol.strip() if record.symbol else ""):
+        symbol_re = (
+            _HISTORICAL_SYMBOL_RE if mode == "historical" else _STRICT_SYMBOL_RE
+        )
+
+        if not record.symbol or not symbol_re.match(record.symbol):
             errors.append(
                 ValidationError(
                     rule="symbol_nonempty",
                     field="symbol",
                     value=record.symbol,
                     message=(
-                        "Symbol must be 1–10 uppercase alphanumeric characters."
+                        "Symbol must be 1–12 uppercase alphanumeric or underscore characters."
+                        if mode == "historical"
+                        else "Symbol must be 1–10 uppercase alphanumeric characters."
                     ),
                 )
             )
@@ -306,7 +319,20 @@ class IngestionValidator:
         # Percentage change sanity
         # --------------------------------------------------------------
 
-        if not (-100 < record.change_percent < 1000):
+        # Strict mode enforces a canonical ceiling of +1000% for live/current
+        # daily trading (where normal sessions operate within +/-10% circuit
+        # filters, and post-corporate actions re-open within wider bounds).
+        #
+        # Historical mode permits legitimate multi-month trading gaps (common
+        # in promoter shares such as FOWADP, NMFBSP, WNLBP where trades occur
+        # months apart and transition from unadjusted par 100 to market price
+        # around 1100–1550, yielding valid historical changes up to ~1450%).
+        # We enforce a ceiling of +2000% in historical mode to preserve protection
+        # against genuinely corrupt numeric anomalies (e.g. 10,000%+) while
+        # faithfully accepting legitimate long-gap historical trades.
+        max_change_percent = 2000.0 if mode == "historical" else 1000.0
+
+        if not (-100 < record.change_percent < max_change_percent):
             errors.append(
                 ValidationError(
                     rule="change_percent_range",
@@ -314,7 +340,7 @@ class IngestionValidator:
                     value=record.change_percent,
                     message=(
                         f"change_percent {record.change_percent} is outside "
-                        "the plausible range (-100, 1000)."
+                        f"the plausible range (-100, {int(max_change_percent)})."
                     ),
                 )
             )

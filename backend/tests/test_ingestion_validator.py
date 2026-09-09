@@ -102,11 +102,19 @@ class TestValidationModeCompatibility:
         result = validator.validate_prices([record], "strict")
         assert len(result.valid) == 1
 
-    def test_invalid_mode_raises_value_error(self, validator: IngestionValidator) -> None:
+    @pytest.mark.parametrize("bad_mode", ["unsupported", "", "HISTORICAL", "Strict", None, 123])
+    def test_invalid_mode_raises_value_error(self, validator: IngestionValidator, bad_mode: object) -> None:
         """Unrecognized validation mode raises ValueError."""
         with pytest.raises(ValueError, match="Invalid validation mode"):
-            validator.validate_prices([_valid_price()], mode="unsupported")  # type: ignore[arg-type]
+            validator.validate_prices([_valid_price()], mode=bad_mode)  # type: ignore[arg-type]
 
+    def test_validate_price_record_directly_rejects_invalid_mode(
+        self, validator: IngestionValidator
+    ) -> None:
+        """Internal _validate_price_record also rejects invalid mode."""
+        from datetime import date
+        with pytest.raises(ValueError, match="Invalid validation mode"):
+            validator._validate_price_record(_valid_price(), date.today(), mode="invalid")  # type: ignore[arg-type]
     def test_mode_passed_to_per_record_validation(self, validator: IngestionValidator) -> None:
         """Mode is propagated to each record: open outside range is allowed in historical only."""
         record = _valid_price(open=530.0, high=520.0, low=500.0, close=515.0)
@@ -134,6 +142,46 @@ class TestSymbolValidation:
         result = validator.validate_prices([_valid_price(symbol="nabil")])
         assert len(result.rejected) == 1
 
+    def test_historical_accepts_underscore_symbols(self, validator: IngestionValidator) -> None:
+        for sym in ["GBD80_81", "NICD83_84", "NMBD87_88", "GBILD84_85"]:
+            res = validator.validate_prices([_valid_price(symbol=sym)], mode="historical")
+            assert len(res.valid) == 1, f"Failed to accept {sym} in historical mode"
+
+    def test_historical_accepts_12_character_symbol_nifraur85_86(
+        self, validator: IngestionValidator
+    ) -> None:
+        res = validator.validate_prices([_valid_price(symbol="NIFRAUR85_86")], mode="historical")
+        assert len(res.valid) == 1
+        assert len(res.rejected) == 0
+
+    def test_strict_rejects_underscore_symbols(self, validator: IngestionValidator) -> None:
+        res = validator.validate_prices([_valid_price(symbol="GBD80_81")], mode="strict")
+        assert len(res.rejected) == 1
+        assert "symbol_nonempty" in [e.rule for e in res.rejected[0][1]]
+
+    def test_strict_rejects_12_char_symbol(self, validator: IngestionValidator) -> None:
+        res = validator.validate_prices([_valid_price(symbol="NIFRAUR85_86")], mode="strict")
+        assert len(res.rejected) == 1
+        assert "symbol_nonempty" in [e.rule for e in res.rejected[0][1]]
+
+    def test_historical_rejects_symbols_longer_than_12_characters(
+        self, validator: IngestionValidator
+    ) -> None:
+        res = validator.validate_prices([_valid_price(symbol="NIFRAUR85_86X")], mode="historical")
+        assert len(res.rejected) == 1
+        assert "symbol_nonempty" in [e.rule for e in res.rejected[0][1]]
+
+    @pytest.mark.parametrize("bad_sym", ["adbl", "gbd80_81", "ADBL-D83", "ADBL.D83", "ADBL 83", " ADBL", "ADBL@1", ""])
+    def test_invalid_symbol_characters_rejected_in_both_modes(
+        self, validator: IngestionValidator, bad_sym: str
+    ) -> None:
+        res_strict = validator.validate_prices([_valid_price(symbol=bad_sym)], mode="strict")
+        assert len(res_strict.rejected) == 1
+        assert "symbol_nonempty" in [e.rule for e in res_strict.rejected[0][1]]
+
+        res_hist = validator.validate_prices([_valid_price(symbol=bad_sym)], mode="historical")
+        assert len(res_hist.rejected) == 1
+        assert "symbol_nonempty" in [e.rule for e in res_hist.rejected[0][1]]
 
 # ---------------------------------------------------------------------------
 # Date validation
@@ -311,6 +359,41 @@ class TestChangePercentRange:
         result = validator.validate_prices([_valid_price(change_percent=999.9)])
         assert len(result.valid) == 1
 
+    def test_historical_mode_accepts_fowadp_long_gap_change(self, validator: IngestionValidator) -> None:
+        """FOWADP on 2022-05-11 traded at 1199 after 8 months at 80 (change=1398.75%). Accepted in historical."""
+        rec = _valid_price(symbol="FOWADP", change_percent=1398.75)
+        res_hist = validator.validate_prices([rec], mode="historical")
+        assert len(res_hist.valid) == 1
+        res_strict = validator.validate_prices([rec], mode="strict")
+        assert len(res_strict.rejected) == 1
+        assert "change_percent_range" in [e.rule for e in res_strict.rejected[0][1]]
+
+    def test_historical_mode_accepts_nmfbsp_long_gap_change(self, validator: IngestionValidator) -> None:
+        """NMFBSP on 2021-10-10 traded at 1537 after 3 months at 100 (change=1437.0%). Accepted in historical."""
+        rec = _valid_price(symbol="NMFBSP", change_percent=1437.0)
+        res_hist = validator.validate_prices([rec], mode="historical")
+        assert len(res_hist.valid) == 1
+        res_strict = validator.validate_prices([rec], mode="strict")
+        assert len(res_strict.rejected) == 1
+        assert "change_percent_range" in [e.rule for e in res_strict.rejected[0][1]]
+
+    def test_historical_mode_accepts_wnlbp_long_gap_change(self, validator: IngestionValidator) -> None:
+        """WNLBP on 2025-10-08 traded at 1138 after 3 months at 100 (change=1038.0%). Accepted in historical."""
+        rec = _valid_price(symbol="WNLBP", change_percent=1038.0)
+        res_hist = validator.validate_prices([rec], mode="historical")
+        assert len(res_hist.valid) == 1
+        res_strict = validator.validate_prices([rec], mode="strict")
+        assert len(res_strict.rejected) == 1
+        assert "change_percent_range" in [e.rule for e in res_strict.rejected[0][1]]
+
+    def test_historical_mode_rejects_greater_than_2000_percent(
+        self, validator: IngestionValidator
+    ) -> None:
+        """Truly absurd changes (>2000%) remain rejected even in historical mode."""
+        rec = _valid_price(change_percent=2500.0)
+        res = validator.validate_prices([rec], mode="historical")
+        assert len(res.rejected) == 1
+        assert "change_percent_range" in [e.rule for e in res.rejected[0][1]]
 
 # ---------------------------------------------------------------------------
 # Snapshot validation
@@ -340,3 +423,151 @@ class TestSnapshotValidation:
             _valid_snapshot(turnover=None, total_volume=None, total_transactions=None)
         )
         assert errors == []
+# ---------------------------------------------------------------------------
+# Historical dataset anomalies (ADBLD83, ADBL, NEPSE specifics)
+# ---------------------------------------------------------------------------
+
+class TestHistoricalDatasetAnomalies:
+    def test_adbld83_ltp_greater_than_high(self, validator: IngestionValidator) -> None:
+        """ADBLD83 2026-06-02: open=1051.90, high=1051.90, low=1051.90, ltp=1083.40.
+
+        Rejected in strict mode, accepted in historical mode.
+        """
+        rec = _valid_price(
+            symbol="ADBLD83",
+            date="2026-06-02",
+            open=1051.90,
+            high=1051.90,
+            low=1051.90,
+            close=1083.40,
+            volume=1,
+            turnover=1083.40,
+        )
+        res_default = validator.validate_prices([rec])
+        assert len(res_default.rejected) == 1
+        assert "ohlc_consistency" in [e.rule for e in res_default.rejected[0][1]]
+
+        res_strict = validator.validate_prices([rec], mode="strict")
+        assert len(res_strict.rejected) == 1
+
+        res_hist = validator.validate_prices([rec], mode="historical")
+        assert len(res_hist.valid) == 1
+        assert len(res_hist.rejected) == 0
+
+    def test_adbld83_ltp_less_than_low(self, validator: IngestionValidator) -> None:
+        """ADBLD83 2025-11-09: open=1132.90, high=1132.90, low=1132.90, ltp=1110.30.
+
+        Rejected in strict mode, accepted in historical mode.
+        """
+        rec = _valid_price(
+            symbol="ADBLD83",
+            date="2025-11-09",
+            open=1132.90,
+            high=1132.90,
+            low=1132.90,
+            close=1110.30,
+            volume=1,
+            turnover=1110.30,
+        )
+        res_strict = validator.validate_prices([rec], mode="strict")
+        assert len(res_strict.rejected) == 1
+        assert "ohlc_consistency" in [e.rule for e in res_strict.rejected[0][1]]
+
+        res_hist = validator.validate_prices([rec], mode="historical")
+        assert len(res_hist.valid) == 1
+
+    def test_adbld83_friday_session(self, validator: IngestionValidator) -> None:
+        """ADBLD83 2026-08-21 was a Friday trading session in NEPSE historical data.
+
+        Rejected in strict mode, accepted in historical mode.
+        """
+        rec = _valid_price(
+            symbol="ADBLD83",
+            date="2026-08-21",
+            open=1039.0,
+            high=1039.0,
+            low=1039.0,
+            close=1039.0,
+        )
+        res_strict = validator.validate_prices([rec], mode="strict")
+        assert len(res_strict.rejected) == 1
+        assert "date_not_weekend" in [e.rule for e in res_strict.rejected[0][1]]
+
+        res_hist = validator.validate_prices([rec], mode="historical")
+        assert len(res_hist.valid) == 1
+
+    def test_adbl_saturday_session_rejected_in_both_modes(self, validator: IngestionValidator) -> None:
+        """ADBL 2016-09-03 was a Saturday, which is non-trading and MUST be rejected even in historical mode."""
+        rec = _valid_price(
+            symbol="ADBL",
+            date="2016-09-03",
+            open=800.0,
+            high=810.0,
+            low=795.0,
+            close=805.0,
+        )
+        res_strict = validator.validate_prices([rec], mode="strict")
+        assert len(res_strict.rejected) == 1
+        assert "date_not_weekend" in [e.rule for e in res_strict.rejected[0][1]]
+
+        res_hist = validator.validate_prices([rec], mode="historical")
+        assert len(res_hist.rejected) == 1
+        assert "date_not_weekend" in [e.rule for e in res_hist.rejected[0][1]]
+
+    def test_historical_mode_preserves_high_greater_equal_low(self, validator: IngestionValidator) -> None:
+        """high < low is fundamentally invalid and MUST be rejected in historical mode."""
+        rec = _valid_price(open=500.0, high=480.0, low=520.0, close=500.0)
+        res_hist = validator.validate_prices([rec], mode="historical")
+        assert len(res_hist.rejected) == 1
+        assert "ohlc_consistency" in [e.rule for e in res_hist.rejected[0][1]]
+
+    def test_historical_mode_preserves_positive_price_requirement(self, validator: IngestionValidator) -> None:
+        """Zero or negative price is fundamentally invalid and MUST be rejected in historical mode."""
+        for field in ("open", "high", "low", "close"):
+            zero_rec = _valid_price(**{field: 0.0})
+            res_zero = validator.validate_prices([zero_rec], mode="historical")
+            assert len(res_zero.rejected) == 1
+            assert "price_positive" in [e.rule for e in res_zero.rejected[0][1]]
+
+            neg_rec = _valid_price(**{field: -5.0})
+            res_neg = validator.validate_prices([neg_rec], mode="historical")
+            assert len(res_neg.rejected) == 1
+            assert "price_positive" in [e.rule for e in res_neg.rejected[0][1]]
+
+    def test_historical_mode_preserves_nonnegative_volume_and_turnover(self, validator: IngestionValidator) -> None:
+        """Negative volume or turnover MUST be rejected in historical mode."""
+        neg_vol = _valid_price(volume=-10)
+        res_vol = validator.validate_prices([neg_vol], mode="historical")
+        assert len(res_vol.rejected) == 1
+        assert "volume_nonnegative" in [e.rule for e in res_vol.rejected[0][1]]
+
+        neg_to = _valid_price(turnover=-50.0)
+        res_to = validator.validate_prices([neg_to], mode="historical")
+        assert len(res_to.rejected) == 1
+        assert "turnover_nonnegative" in [e.rule for e in res_to.rejected[0][1]]
+
+    def test_historical_mode_preserves_symbol_validation(self, validator: IngestionValidator) -> None:
+        """Empty or invalid symbol MUST be rejected in historical mode."""
+        empty_sym = _valid_price(symbol="")
+        res = validator.validate_prices([empty_sym], mode="historical")
+        assert len(res.rejected) == 1
+        assert "symbol_nonempty" in [e.rule for e in res.rejected[0][1]]
+
+    def test_historical_mode_preserves_date_format_and_future_date_checks(self, validator: IngestionValidator) -> None:
+        """Malformed or future dates MUST be rejected in historical mode."""
+        malformed = _valid_price(date="2024/01/01")
+        res_fmt = validator.validate_prices([malformed], mode="historical")
+        assert len(res_fmt.rejected) == 1
+        assert "date_format" in [e.rule for e in res_fmt.rejected[0][1]]
+
+        future = _valid_price(date="2099-01-01")
+        res_future = validator.validate_prices([future], mode="historical")
+        assert len(res_future.rejected) == 1
+        assert "date_not_future" in [e.rule for e in res_future.rejected[0][1]]
+
+    def test_historical_mode_preserves_change_percent_bounds(self, validator: IngestionValidator) -> None:
+        """Absurd percentage changes MUST be rejected in historical mode."""
+        insane = _valid_price(change_percent=5000.0)
+        res = validator.validate_prices([insane], mode="historical")
+        assert len(res.rejected) == 1
+        assert "change_percent_range" in [e.rule for e in res.rejected[0][1]]
