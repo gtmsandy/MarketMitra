@@ -103,7 +103,7 @@ def db_session(pg_engine):
     session = factory()
 
     # Clean tables before each test
-    session.execute(text("TRUNCATE TABLE daily_prices, market_snapshots, instruments, ingestion_runs CASCADE"))
+    session.execute(text("TRUNCATE TABLE daily_prices, market_snapshots, instruments, ingestion_runs, live_quotes CASCADE"))
     session.commit()
 
     try:
@@ -371,3 +371,44 @@ class TestPreProductionGate:
         assert snap.turnover != 0.0
         assert snap.total_volume != 0
         assert snap.total_transactions != 0
+
+    def test_j_live_quotes_unique_constraint_in_postgres(self, db_session: Session) -> None:
+        """J. Inserting duplicate (symbol, timestamp) into live_quotes raises IntegrityError in PostgreSQL."""
+        from app.db.models import LiveQuote
+
+        inst = Instrument(symbol="LIVEUNIQ", company_name="Live Uniq Corp", created_at=datetime.now(tz=timezone.utc))
+        db_session.add(inst)
+        db_session.flush()
+
+        now = datetime(2026, 9, 10, 11, 30, tzinfo=timezone.utc)
+        q1 = LiveQuote(
+            symbol="LIVEUNIQ",
+            timestamp=now,
+            open=100.0,
+            high=105.0,
+            low=95.0,
+            close=100.0,
+            volume=10,
+            turnover=1000.0,
+            provider="test",
+            ingested_at=now,
+        )
+        q2 = LiveQuote(
+            symbol="LIVEUNIQ",
+            timestamp=now,
+            open=102.0,
+            high=106.0,
+            low=96.0,
+            close=101.0,
+            volume=20,
+            turnover=2020.0,
+            provider="test",
+            ingested_at=now,
+        )
+        db_session.add(q1)
+        db_session.flush()
+
+        db_session.add(q2)
+        with pytest.raises(IntegrityError):
+            db_session.flush()
+        db_session.rollback()

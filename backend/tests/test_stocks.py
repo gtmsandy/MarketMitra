@@ -122,3 +122,27 @@ class TestStockHistory:
         for point in response.json():
             d = date_type.fromisoformat(point["date"])
             assert d.weekday() not in (4, 5), f"{point['date']} is a NEPSE holiday"
+
+
+class TestStockIntraday:
+    """GET /api/v1/stocks/{symbol}/intraday — intraday price observations."""
+
+    def test_unknown_symbol_returns_404(self, client: TestClient) -> None:
+        response = client.get("/api/v1/stocks/NONEXIST/intraday")
+        assert response.status_code == 404
+        assert response.json()["detail"] == "Stock not found"
+
+    def test_valid_symbol_without_intraday_data_returns_honest_empty_list(
+        self, client: TestClient
+    ) -> None:
+        """When no live quotes exist, returns an honest empty list with zero fake prices."""
+        response = client.get("/api/v1/stocks/NABIL/intraday")
+        assert response.status_code == 200
+        data = response.json()
+        assert isinstance(data, list)
+        assert data == []
+
+    def test_case_insensitive_symbol(self, client: TestClient) -> None:
+        response = client.get("/api/v1/stocks/nabil/intraday")
+        assert response.status_code == 200
+        assert response.json() == []

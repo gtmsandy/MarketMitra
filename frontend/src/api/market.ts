@@ -1,5 +1,6 @@
 import { fetchJson } from './client'
 import type {
+  IntradayPricePoint,
   MarketMover,
   MarketOverview,
   MostActiveStock,
@@ -38,5 +39,9 @@ export function getStockDetail(symbol: string): Promise<StockDetail> {
 
 export function getStockHistory(symbol: string): Promise<PriceHistoryPoint[]> {
   return fetchJson(`/api/v1/stocks/${encodeURIComponent(symbol)}/history`)
+}
+
+export function getStockIntraday(symbol: string): Promise<IntradayPricePoint[]> {
+  return fetchJson(`/api/v1/stocks/${encodeURIComponent(symbol)}/intraday`)
 }
 

@@ -114,4 +114,17 @@ class TestPostgresStocksApi:
     def test_stock_history_unknown_symbol(self, postgres_client: TestClient) -> None:
         resp = postgres_client.get("/api/v1/stocks/NONEXIST123/history")
         assert resp.status_code == 404
+
+    def test_stock_intraday_known_symbol_empty(self, postgres_client: TestClient) -> None:
+        """Known symbol without live quotes returns an honest empty list with zero fake data."""
+        resp = postgres_client.get("/api/v1/stocks/NABIL/intraday")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert isinstance(data, list)
+        assert data == []
+
+    def test_stock_intraday_unknown_symbol(self, postgres_client: TestClient) -> None:
+        """Unknown symbol returns 404."""
+        resp = postgres_client.get("/api/v1/stocks/NONEXIST123/intraday")
+        assert resp.status_code == 404
         assert resp.json()["detail"] == "Stock not found"

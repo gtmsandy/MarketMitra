@@ -12,6 +12,18 @@ class PriceHistoryPoint(BaseModel):
     volume: int
 
 
+class IntradayPricePoint(BaseModel):
+    timestamp: datetime
+    open: float
+    high: float
+    low: float
+    close: float
+    volume: int
+    turnover: float = 0.0
+    provider: str = "unspecified"
+    source_timestamp: datetime | None = None
+
+
 class StockDetail(BaseModel):
     symbol: str
     company_name: str

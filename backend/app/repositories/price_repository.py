@@ -5,7 +5,7 @@ from typing import Literal
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.db.models import DailyPrice
+from app.db.models import DailyPrice, LiveQuote
 
 
 @dataclass
@@ -57,6 +57,10 @@ class DailyPriceRepository(ABC):
     @abstractmethod
     def get_latest_by_symbol(self, symbol: str) -> DailyPrice | None:
         """Return the most recent price row for a symbol, or None."""
+
+    @abstractmethod
+    def get_intraday_by_symbol(self, symbol: str) -> list[LiveQuote]:
+        """Return all intraday live quote rows for a symbol, ordered by timestamp ascending."""
 
 
 class PostgresDailyPriceRepository(DailyPriceRepository):
@@ -147,4 +151,12 @@ class PostgresDailyPriceRepository(DailyPriceRepository):
             .filter(DailyPrice.symbol == symbol)
             .order_by(DailyPrice.date.desc())
             .first()
+        )
+
+    def get_intraday_by_symbol(self, symbol: str) -> list[LiveQuote]:
+        return (
+            self._session.query(LiveQuote)
+            .filter(LiveQuote.symbol == symbol)
+            .order_by(LiveQuote.timestamp.asc())
+            .all()
         )

@@ -7,9 +7,9 @@ KATHMANDU_TZ = ZoneInfo("Asia/Kathmandu")
 TRADING_WEEKDAYS = {6, 0, 1, 2, 3}  # Sunday through Thursday
 NON_TRADING_WEEKDAYS = {4, 5}  # Friday and Saturday
 
+PRE_OPEN_START_TIME = time(10, 30, 0)
 MARKET_OPEN_TIME = time(11, 0, 0)
 MARKET_CLOSE_TIME = time(15, 0, 0)
-
 
 def to_kathmandu_time(dt: datetime | None = None) -> datetime:
     """Normalize any datetime to Asia/Kathmandu timezone.
@@ -37,10 +37,33 @@ def is_market_open(now: datetime | None = None) -> bool:
     return MARKET_OPEN_TIME <= ktm_now.time() <= MARKET_CLOSE_TIME
 
 
-def get_market_status(now: datetime | None = None) -> str:
-    """Return 'OPEN' if market is in active trading session, else 'CLOSED'."""
-    return "OPEN" if is_market_open(now) else "CLOSED"
+def is_pre_open(now: datetime | None = None) -> bool:
+    """Return True if market is currently in the pre-open order-entry session (10:30-11:00 NST)."""
+    ktm_now = to_kathmandu_time(now)
+    if ktm_now.weekday() not in TRADING_WEEKDAYS:
+        return False
+    return PRE_OPEN_START_TIME <= ktm_now.time() < MARKET_OPEN_TIME
 
+
+def get_market_status(
+    now: datetime | None = None,
+    feed_accessible: bool = True,
+    is_halted: bool = False,
+    is_stale: bool = False,
+) -> str:
+    """Return 'OPEN', 'CLOSED', 'HALTED', 'DATA_UNAVAILABLE', or 'STALE'."""
+    if is_halted:
+        return "HALTED"
+
+    open_session = is_market_open(now)
+    if open_session:
+        if not feed_accessible:
+            return "DATA_UNAVAILABLE"
+        if is_stale:
+            return "STALE"
+        return "OPEN"
+
+    return "CLOSED"
 
 def get_most_recent_trading_day(now: datetime | None = None) -> date:
     """Return the calendar date of the most recent active regular trading day.

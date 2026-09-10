@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import DateTime, Float, ForeignKey, Integer, String, UniqueConstraint
+from sqlalchemy import DateTime, Float, ForeignKey, Index, Integer, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -88,3 +88,30 @@ class IngestionRun(Base):
     prices_replaced: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     prices_rejected: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     error_detail: Mapped[str | None] = mapped_column(String, nullable=True)
+
+
+class LiveQuote(Base):
+    """Real-time or intraday price quote observation."""
+
+    __tablename__ = "live_quotes"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    symbol: Mapped[str] = mapped_column(
+        String, ForeignKey("instruments.symbol", ondelete="CASCADE"), nullable=False, index=True
+    )
+    timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
+    open: Mapped[float] = mapped_column(Float, nullable=False)
+    high: Mapped[float] = mapped_column(Float, nullable=False)
+    low: Mapped[float] = mapped_column(Float, nullable=False)
+    close: Mapped[float] = mapped_column(Float, nullable=False)  # Current LTP
+    volume: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    turnover: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    provider: Mapped[str] = mapped_column(String, nullable=False, default="unspecified")
+    source_timestamp: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    ingested_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    instrument: Mapped["Instrument"] = relationship("Instrument")
+    __table_args__ = (
+        UniqueConstraint("symbol", "timestamp", name="uq_live_quotes_symbol_timestamp"),
+        Index("ix_live_quotes_symbol_timestamp", "symbol", "timestamp"),
+    )

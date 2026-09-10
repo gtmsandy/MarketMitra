@@ -8,7 +8,7 @@ from app.models.market import (
     MostActiveStock,
     StockQuote,
 )
-from app.models.stock import PriceHistoryPoint, StockDetail
+from app.models.stock import IntradayPricePoint, PriceHistoryPoint, StockDetail
 from app.providers.base import MarketDataProvider
 
 
@@ -286,6 +286,13 @@ class MockMarketProvider(MarketDataProvider):
             price = close
 
         return points
+
+    def get_stock_intraday(self, symbol: str) -> list[IntradayPricePoint] | None:
+        stock = self._stock_by_symbol.get(symbol.upper())
+        if stock is None:
+            return None
+        # Mock provider honestly returns an empty list for intraday observations: zero fake data!
+        return []
 
     @staticmethod
     def _to_market_mover(stock: StockQuote) -> MarketMover:

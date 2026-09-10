@@ -4,7 +4,7 @@ from app.models.market import (
     MostActiveStock,
     StockQuote,
 )
-from app.models.stock import PriceHistoryPoint, StockDetail
+from app.models.stock import IntradayPricePoint, PriceHistoryPoint, StockDetail
 from app.providers.base import MarketDataProvider
 
 
@@ -35,4 +35,7 @@ class MarketService:
 
     def get_stock_history(self, symbol: str) -> list[PriceHistoryPoint] | None:
         return self._provider.get_stock_history(symbol)
+
+    def get_stock_intraday(self, symbol: str) -> list[IntradayPricePoint] | None:
+        return self._provider.get_stock_intraday(symbol)
 

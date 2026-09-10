@@ -6,7 +6,7 @@ from app.models.market import (
     MostActiveStock,
     StockQuote,
 )
-from app.models.stock import PriceHistoryPoint, StockDetail
+from app.models.stock import IntradayPricePoint, PriceHistoryPoint, StockDetail
 
 
 class MarketDataProvider(ABC):
@@ -41,3 +41,7 @@ class MarketDataProvider(ABC):
     @abstractmethod
     def get_stock_history(self, symbol: str) -> list[PriceHistoryPoint] | None:
         """Return historical price data for a stock, or None if not found."""
+
+    @abstractmethod
+    def get_stock_intraday(self, symbol: str) -> list[IntradayPricePoint] | None:
+        """Return chronological intraday price observations for a stock, or None if not found."""

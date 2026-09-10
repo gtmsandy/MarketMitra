@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
 import {
   getMarketOverview,
@@ -36,6 +36,7 @@ function DashboardPage({ onOverviewLoaded }: DashboardPageProps) {
   const [dashboardData, setDashboardData] = useState<DashboardData | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [hasError, setHasError] = useState(false)
+  const isRefreshingRef = useRef(false)
 
   const loadDashboard = useCallback(async () => {
     setIsLoading(true)
@@ -59,10 +60,39 @@ function DashboardPage({ onOverviewLoaded }: DashboardPageProps) {
     }
   }, [onOverviewLoaded])
 
+  const refreshData = useCallback(async () => {
+    if (isRefreshingRef.current) return
+    isRefreshingRef.current = true
+    try {
+      const [overview, gainers, losers, mostActive] = await Promise.all([
+        getMarketOverview(),
+        getTopGainers(),
+        getTopLosers(),
+        getMostActiveStocks(),
+      ])
+      setDashboardData({ overview, gainers, losers, mostActive })
+      onOverviewLoaded(overview)
+    } catch {
+      // Background poll failure: preserve existing dashboard state without disruption
+    } finally {
+      isRefreshingRef.current = false
+    }
+  }, [onOverviewLoaded])
+
   useEffect(() => {
     void loadDashboard()
   }, [loadDashboard])
 
+  // Auto-refresh: 30s polling only when market status is OPEN
+  useEffect(() => {
+    if (!dashboardData || dashboardData.overview.market_status.toUpperCase() !== 'OPEN') {
+      return
+    }
+    const timer = setInterval(() => {
+      void refreshData()
+    }, 30000)
+    return () => clearInterval(timer)
+  }, [dashboardData, refreshData])
   if (isLoading) {
     return <LoadingState />
   }

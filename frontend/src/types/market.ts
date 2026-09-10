@@ -48,6 +48,18 @@ export type PriceHistoryPoint = {
   volume: number
 }
 
+
+export type IntradayPricePoint = {
+  timestamp: string
+  open: number
+  high: number
+  low: number
+  close: number
+  volume: number
+  turnover: number
+  provider: string
+  source_timestamp: string | null
+}
 export type StockDetail = {
   symbol: string
   company_name: string

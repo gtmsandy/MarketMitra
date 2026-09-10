@@ -308,3 +308,58 @@ class TestPostgresMarketProviderHistory:
     def test_unknown_symbol_returns_none(self, seeded_session: Session) -> None:
         provider = PostgresMarketProvider(seeded_session)
         assert provider.get_stock_history("NONEXIST") is None
+
+
+class TestPostgresMarketProviderIntraday:
+    def test_unknown_symbol_returns_none(self, seeded_session: Session) -> None:
+        provider = PostgresMarketProvider(seeded_session)
+        assert provider.get_stock_intraday("NONEXIST") is None
+
+    def test_known_symbol_without_intraday_returns_empty_list(self, seeded_session: Session) -> None:
+        provider = PostgresMarketProvider(seeded_session)
+        intraday = provider.get_stock_intraday("NABIL")
+        assert intraday is not None
+        assert intraday == []
+
+    def test_symbol_with_live_quotes_returns_chronological_points(self, session: Session) -> None:
+        from app.db.models import LiveQuote
+        from datetime import datetime, timezone
+
+        inst_repo = PostgresInstrumentRepository(session)
+        inst_repo.upsert("INTRADAY", "Intraday Corp")
+
+        q1 = LiveQuote(
+            symbol="INTRADAY",
+            timestamp=datetime(2026, 9, 10, 11, 15, tzinfo=timezone.utc),
+            open=100.0,
+            high=102.0,
+            low=99.0,
+            close=101.5,
+            volume=500,
+            turnover=50750.0,
+            provider="nepse_test",
+            ingested_at=datetime(2026, 9, 10, 11, 15, 1, tzinfo=timezone.utc),
+        )
+        q2 = LiveQuote(
+            symbol="INTRADAY",
+            timestamp=datetime(2026, 9, 10, 11, 30, tzinfo=timezone.utc),
+            open=101.5,
+            high=105.0,
+            low=101.0,
+            close=104.0,
+            volume=1200,
+            turnover=124800.0,
+            provider="nepse_test",
+            ingested_at=datetime(2026, 9, 10, 11, 30, 2, tzinfo=timezone.utc),
+        )
+        session.add_all([q1, q2])
+        session.commit()
+
+        provider = PostgresMarketProvider(session)
+        intraday = provider.get_stock_intraday("INTRADAY")
+        assert intraday is not None
+        assert len(intraday) == 2
+        assert intraday[0].timestamp < intraday[1].timestamp
+        assert intraday[0].close == 101.5
+        assert intraday[1].close == 104.0
+        assert intraday[0].provider == "nepse_test"

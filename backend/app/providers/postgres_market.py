@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from sqlalchemy.orm import Session
 
 from app.models.market import (
@@ -7,7 +7,7 @@ from app.models.market import (
     MostActiveStock,
     StockQuote,
 )
-from app.models.stock import PriceHistoryPoint, StockDetail
+from app.models.stock import IntradayPricePoint, PriceHistoryPoint, StockDetail
 from app.providers.base import MarketDataProvider
 from app.repositories.instrument_repository import PostgresInstrumentRepository
 from app.repositories.market_repository import PostgresMarketSnapshotRepository
@@ -128,12 +128,15 @@ class PostgresMarketProvider(MarketDataProvider):
         high_52w = max(high_52w, price.high)
         low_52w = min(low_52w, price.low)
 
+        price_date = date.fromisoformat(price.date)
         latest_snapshot = self._snapshots.get_latest()
-        if latest_snapshot is not None:
+        if (
+            latest_snapshot is not None
+            and latest_snapshot.captured_at.date() >= price_date
+        ):
             last_updated = latest_snapshot.captured_at
         else:
             last_updated = datetime.fromisoformat(f"{price.date}T00:00:00+00:00")
-
         return StockDetail(
             symbol=instrument.symbol,
             company_name=instrument.company_name,
@@ -167,6 +170,26 @@ class PostgresMarketProvider(MarketDataProvider):
             for row in rows
         ]
 
+    def get_stock_intraday(self, symbol: str) -> list[IntradayPricePoint] | None:
+        instrument = self._instruments.get_by_symbol(symbol.upper())
+        if instrument is None:
+            return None
+        quotes = self._prices.get_intraday_by_symbol(symbol.upper())
+        return [
+            IntradayPricePoint(
+                timestamp=q.timestamp,
+                open=q.open,
+                high=q.high,
+                low=q.low,
+                close=q.close,
+                volume=q.volume,
+                turnover=q.turnover,
+                provider=q.provider,
+                source_timestamp=q.source_timestamp,
+            )
+            for q in quotes
+        ]
+
     # ------------------------------------------------------------------
     # Helpers
     # ------------------------------------------------------------------
@@ -197,10 +220,15 @@ class PostgresMarketProvider(MarketDataProvider):
         price,
         snapshot_timestamp: datetime | None = None,
     ) -> StockQuote:
-        if snapshot_timestamp is not None:
+        price_date = date.fromisoformat(price.date)
+        if (
+            snapshot_timestamp is not None
+            and snapshot_timestamp.date() >= price_date
+        ):
             last_updated = snapshot_timestamp
         else:
             last_updated = datetime.fromisoformat(f"{price.date}T00:00:00+00:00")
+
         return StockQuote(
             symbol=instrument.symbol,
             company_name=instrument.company_name,

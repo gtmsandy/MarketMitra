@@ -37,6 +37,32 @@ export function formatSignedNumber(value: number): string {
   return `${sign}${formatNumber(value, 2)}`
 }
 
+export function formatDate(value: string): string {
+  return new Intl.DateTimeFormat('en-NP', {
+    dateStyle: 'medium',
+  }).format(new Date(value))
+}
+
+export function formatObservationDate(value: string): string {
+  const d = new Date(value)
+  const isMidnightUtc =
+    value.endsWith('T00:00:00Z') ||
+    value.endsWith('T00:00:00+00:00') ||
+    (d.getUTCHours() === 0 && d.getUTCMinutes() === 0 && d.getUTCSeconds() === 0)
+  if (isMidnightUtc) {
+    return new Intl.DateTimeFormat('en-NP', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      timeZone: 'UTC',
+    }).format(d)
+  }
+  return new Intl.DateTimeFormat('en-NP', {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  }).format(d)
+}
+
 export function formatDateTime(value: string): string {
   return new Intl.DateTimeFormat('en-NP', {
     dateStyle: 'medium',
