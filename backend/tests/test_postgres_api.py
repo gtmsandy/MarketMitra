@@ -71,6 +71,31 @@ class TestPostgresMarketApi:
         turnovers = [item["turnover"] for item in data]
         assert turnovers == sorted(turnovers, reverse=True)
 
+    def test_market_breadth(self, postgres_client: TestClient) -> None:
+        resp = postgres_client.get("/api/v1/market/breadth")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["observation_date"] == "2026-09-03"
+        assert data["advancing_count"] > 0
+        assert data["declining_count"] > 0
+        assert data["total_count"] == data["advancing_count"] + data["declining_count"] + data["unchanged_count"]
+        assert data["advance_decline_ratio"] is not None
+
+    def test_sector_analytics(self, postgres_client: TestClient) -> None:
+        resp = postgres_client.get("/api/v1/market/sectors")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert len(data) == 12  # 12 genuine economic sectors (non-equities excluded)
+        assert data[0]["observation_date"] == "2026-09-03"
+        assert data[0]["methodology"] == "equal_weighted_constituent_daily_percentage_change"
+
+    def test_market_heatmap(self, postgres_client: TestClient) -> None:
+        resp = postgres_client.get("/api/v1/market/heatmap")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert len(data) == 278  # common latest equity session; non-trading equities excluded
+        assert data[0]["weight_metric"] == "turnover"
+
 
 class TestPostgresStocksApi:
     def test_stocks_listing_returns_all_postgres_instruments(self, postgres_client: TestClient) -> None:
@@ -107,8 +132,8 @@ class TestPostgresStocksApi:
         assert resp.status_code == 200
         data = resp.json()
         assert isinstance(data, list)
-        # Real historical data: 3,523 points (far exceeds mock's 180 points)
-        assert len(data) > 3000
+        # Invalid historical bars are quarantined from the active history.
+        assert len(data) > 2500
         assert data[0]["date"] < data[-1]["date"]  # Chronological order
 
     def test_stock_history_unknown_symbol(self, postgres_client: TestClient) -> None:

@@ -116,12 +116,12 @@ class TestValidationModeCompatibility:
         with pytest.raises(ValueError, match="Invalid validation mode"):
             validator._validate_price_record(_valid_price(), date.today(), mode="invalid")  # type: ignore[arg-type]
     def test_mode_passed_to_per_record_validation(self, validator: IngestionValidator) -> None:
-        """Mode is propagated to each record: open outside range is allowed in historical only."""
+        """Historical mode still enforces canonical OHLC ordering."""
         record = _valid_price(open=530.0, high=520.0, low=500.0, close=515.0)
         res_strict = validator.validate_prices([record], mode="strict")
         res_historical = validator.validate_prices([record], mode="historical")
         assert len(res_strict.rejected) == 1
-        assert len(res_historical.valid) == 1
+        assert len(res_historical.rejected) == 1
 
 # ---------------------------------------------------------------------------
 # Symbol validation
@@ -255,29 +255,29 @@ class TestOHLCValidation:
         assert len(result.rejected) == 1
         assert "ohlc_consistency" in [e.rule for e in result.rejected[0][1]]
 
-    def test_historical_accepts_legacy_close_outside_range(self, validator: IngestionValidator) -> None:
+    def test_historical_rejects_close_outside_range(self, validator: IngestionValidator) -> None:
         # close > high (e.g. ADBLD83 2025-04-07: open=1090, high=1090, low=1090, ltp/close=1111.70)
         res_above = validator.validate_prices(
             [_valid_price(open=1090.0, high=1090.0, low=1090.0, close=1111.70)], mode="historical"
         )
-        assert len(res_above.valid) == 1
+        assert len(res_above.rejected) == 1
         # close < low
         res_below = validator.validate_prices(
             [_valid_price(open=510.0, high=520.0, low=500.0, close=490.0)], mode="historical"
         )
-        assert len(res_below.valid) == 1
+        assert len(res_below.rejected) == 1
 
-    def test_historical_accepts_legacy_open_outside_range(self, validator: IngestionValidator) -> None:
+    def test_historical_rejects_open_outside_range(self, validator: IngestionValidator) -> None:
         # open > high
         res_above = validator.validate_prices(
             [_valid_price(open=530.0, high=520.0, low=500.0, close=515.0)], mode="historical"
         )
-        assert len(res_above.valid) == 1
+        assert len(res_above.rejected) == 1
         # open < low
         res_below = validator.validate_prices(
             [_valid_price(open=480.0, high=520.0, low=500.0, close=515.0)], mode="historical"
         )
-        assert len(res_below.valid) == 1
+        assert len(res_below.rejected) == 1
 
     def test_both_modes_reject_high_less_than_low(self, validator: IngestionValidator) -> None:
         res_strict = validator.validate_prices([_valid_price(high=490.0, low=510.0)], mode="strict")
@@ -451,8 +451,7 @@ class TestHistoricalDatasetAnomalies:
         assert len(res_strict.rejected) == 1
 
         res_hist = validator.validate_prices([rec], mode="historical")
-        assert len(res_hist.valid) == 1
-        assert len(res_hist.rejected) == 0
+        assert len(res_hist.rejected) == 1
 
     def test_adbld83_ltp_less_than_low(self, validator: IngestionValidator) -> None:
         """ADBLD83 2025-11-09: open=1132.90, high=1132.90, low=1132.90, ltp=1110.30.
@@ -474,7 +473,7 @@ class TestHistoricalDatasetAnomalies:
         assert "ohlc_consistency" in [e.rule for e in res_strict.rejected[0][1]]
 
         res_hist = validator.validate_prices([rec], mode="historical")
-        assert len(res_hist.valid) == 1
+        assert len(res_hist.rejected) == 1
 
     def test_adbld83_friday_session(self, validator: IngestionValidator) -> None:
         """ADBLD83 2026-08-21 was a Friday trading session in NEPSE historical data.

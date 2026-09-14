@@ -17,7 +17,7 @@ class RawInstrumentRecord:
     symbol: str
     company_name: str
     sector: str | None = None
-
+    security_type: str = "EQUITY"
 
 @dataclass
 class RawSnapshotRecord:
@@ -35,12 +35,12 @@ class RawSnapshotRecord:
 class RawPriceRecord:
     symbol: str
     date: str          # expected ISO-8601: YYYY-MM-DD
-    open: float
-    high: float
-    low: float
-    close: float
-    volume: int
-    turnover: float
+    open: float | None
+    high: float | None
+    low: float | None
+    close: float | None
+    volume: int | None
+    turnover: float | None
     change: float = 0.0
     change_percent: float = 0.0
     previous_close: float = 0.0

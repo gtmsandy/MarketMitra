@@ -1,177 +1,120 @@
 # MarketMitra
 
-> **NEPSE Market Intelligence & Analytics Platform**
-
-MarketMitra is a full-stack market intelligence platform designed for the
-Nepal Stock Exchange (NEPSE).
-
-It brings market data, historical analysis, sector intelligence, market
-breadth, stock analytics, screening, alerts, and explainable market insights
-together in a unified platform.
-
-The platform is designed around one core objective:
-
-> **Turn market data into information that actually matters.**
-
----
+MarketMitra is a NEPSE-oriented market analytics platform focused on clear, explainable market intelligence from historical and authorized market data.
 
 ## Overview
 
-MarketMitra is designed to provide investors, researchers, and market
-enthusiasts with a structured way to explore the Nepalese equity market.
+The application presents market overview metrics, equity breadth, movers, sector performance, a heatmap, stock search, and stock history through a responsive web interface.
 
-Instead of presenting market data as isolated numbers, MarketMitra combines:
+## Key capabilities
 
-- market-wide indicators
-- stock-level price data
-- historical trends
-- market breadth
-- sector performance
-- volume and turnover analytics
-- market heatmaps
-- technical indicators
-- screening
-- alerts
-- anomaly detection
-- explainable market intelligence
+Implemented capabilities include historical market analytics, common-session equity rankings, sector analytics, heatmap filtering, stock search, stock detail/history, explicit freshness and observation dates, and a responsive dashboard. The backend uses a provider interface so authorized live feeds can be added without changing frontend API consumers.
 
-into a single analytical workflow.
+Planned capabilities include licensed real-time feeds, watchlists, alerts, screening, anomaly detection, corporate-event intelligence, and an explainable AI market assistant.
 
----
+## Data integrity principles
 
-# Key Features
+MarketMitra preserves source-derived observations and does not fabricate financial values. Structurally invalid source observations are excluded from active analytics while their original values remain available for auditability; financial observations are never silently rewritten. Responses expose freshness and observation dates, distinguish market snapshots from equity sessions, and apply explicit security taxonomy so non-equity instruments do not enter equity analytics.
 
-## Market Dashboard
-
-A centralized market overview providing:
-
-- NEPSE index
-- index movement
-- market status
-- data freshness
-- market breadth
-- advancing / declining / unchanged securities
-- top gainers
-- top losers
-- most active securities
-- market-wide activity indicators
-
----
-
-## Market Movers
-
-Analyze daily market activity through:
-
-### Top Gainers
-
-Rank securities by daily percentage change.
-
-### Top Losers
-
-Identify securities experiencing the largest daily declines.
-
-### Most Active
-
-Rank securities by trading activity using volume and turnover.
-
----
-
-## Market Breadth
-
-MarketMitra provides market-breadth analytics including:
-
-- advancing securities
-- declining securities
-- unchanged securities
-- advance/decline ratio
-- advance percentage
-- decline percentage
-- breadth trends
-
-This provides a broader view of market participation beyond the NEPSE index.
-
----
-
-## Sector Intelligence
-
-Analyze the performance of NEPSE's economic sectors.
-
-Sector analytics include:
-
-- sector performance
-- constituent performance
-- advancing / declining breadth
-- volume
-- turnover
-- relative performance
-- sector rankings
-- sector comparisons
-
-The platform maintains a clear distinction between economic sectors and
-non-equity security classes.
-
----
-
-## Market Heatmap
-
-The MarketMitra heatmap provides a visual representation of market performance.
-
-Features include:
-
-- sector filtering
-- security-level performance
-- daily percentage-change visualization
-- performance intensity
-- stock-level navigation
-
-The heatmap is designed to make market-wide patterns visible at a glance.
-
----
-
-## Stock Intelligence
-
-Each listed security can have a dedicated analytical view containing:
-
-- current price
-- daily change
-- OHLC information
-- volume
-- turnover
-- historical prices
-- historical performance
-- trading activity
-- technical indicators
-- trend analysis
-
----
-
-## Historical Market Analysis
-
-MarketMitra is designed to work with long-term historical market data.
-
-Historical analytics can be used for:
-
-- price trends
-- performance comparison
-- sector comparison
-- volatility analysis
-- volume analysis
-- historical drawdowns
-- market-cycle analysis
-- event-period analysis
-
----
-
-# Security Classification
-
-Financial instruments are not treated as one homogeneous dataset.
-
-MarketMitra distinguishes between:
+## Architecture
 
 ```text
-EQUITY
-PROMOTER_SHARE
-DEBENTURE
-MUTUAL_FUND
-GOVERNMENT_BOND
-PREFERENCE_SHARE
+React + TypeScript + Vite
+          │ REST API
+FastAPI + SQLAlchemy + provider interface
+          │
+PostgreSQL + Alembic
+```
+
+The frontend communicates only with versioned backend APIs. Market data access is isolated behind providers, with PostgreSQL-backed and mock implementations.
+
+## Security taxonomy
+
+Instruments are classified as equity, promoter share, debenture, mutual fund, government bond, or preference share. Equity breadth, movers, sectors, and heatmap analytics filter to common equities so comparisons remain meaningful.
+
+## Installation
+
+Requirements: Python 3.14 or a compatible supported Python version, Node.js compatible with the installed Vite release, npm, and PostgreSQL for the PostgreSQL provider.
+
+```bash
+cd backend
+python -m venv .venv
+# Windows: .venv\\Scripts\\activate
+# macOS/Linux: source .venv/bin/activate
+pip install -r requirements.txt
+alembic upgrade head
+```
+
+## Configuration
+
+Create `backend/.env` using placeholders:
+
+```env
+CORS_ORIGINS=http://localhost:5173
+MARKET_DATA_SOURCE=postgres
+DATABASE_URL=postgresql://<user>:<password>@localhost:5432/<database>
+```
+
+Use `MARKET_DATA_SOURCE=mock` when developing without PostgreSQL.
+
+## Running the backend
+
+```bash
+cd backend
+python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
+```
+
+Health: `http://127.0.0.1:8000/api/v1/health`
+
+## Running the frontend
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+The development interface is served at the Vite URL shown in the terminal.
+
+## Testing
+
+```bash
+cd backend
+python -m pytest
+
+cd ../frontend
+npm run lint
+npm run build
+```
+
+## Project structure
+
+```text
+backend/app/api          Versioned HTTP endpoints
+backend/app/models       Domain response models
+backend/app/providers    Market-data provider implementations
+backend/app/repositories Persistence interfaces and adapters
+backend/alembic          Database migrations
+frontend/src/pages       Dashboard, analytics, and stock views
+frontend/src/components  Shared tables, cards, search, and charts
+```
+
+## Data sources
+
+Datasets and providers must be obtained and used according to their respective terms and licensing. MarketMitra is an independent project and does not imply official NEPSE affiliation.
+
+## Real-time architecture
+
+The provider interface is designed to support an authorized, licensed real-time feed. Current deployments should be understood according to their configured provider and freshness metadata; the project does not claim production live connectivity by default.
+
+## Future intelligence
+
+Future intelligence features are intended to explain market observations, data provenance, and screening signals. They are educational analytics and do not provide guaranteed investment outcomes or buy/sell advice.
+
+## Disclaimer
+
+MarketMitra provides informational and educational market analytics. Verify information independently and consult a qualified professional before making financial decisions.
+
+## License
+
+No open-source license has yet been specified for this repository.

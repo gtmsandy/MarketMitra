@@ -28,7 +28,6 @@
 }
 
 body {
-  min-width: 320px;
   margin: 0;
   background: var(--color-bg);
 }
@@ -310,6 +309,224 @@ button {
 
 .data-panel--wide {
   grid-column: 1 / -1;
+}
+
+/* Market Breadth Card */
+.breadth-summary {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+
+.breadth-stat {
+  display: flex;
+  flex-direction: column;
+  padding: var(--space-3);
+  background: var(--color-bg);
+  border-radius: 6px;
+  border-left: 3px solid transparent;
+}
+
+.breadth-stat--advancing {
+  border-left-color: var(--color-positive);
+}
+
+.breadth-stat--declining {
+  border-left-color: var(--color-negative);
+}
+
+.breadth-stat--unchanged {
+  border-left-color: var(--color-neutral);
+}
+
+.breadth-stat--ratio {
+  border-left-color: var(--color-brand);
+}
+
+.breadth-stat__label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--color-neutral);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.breadth-stat__value {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--color-text);
+  margin-top: 2px;
+}
+
+.breadth-stat__value--positive {
+  color: var(--color-positive);
+}
+
+.breadth-stat__value--negative {
+  color: var(--color-negative);
+}
+
+.breadth-stat__pct {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--color-neutral);
+  margin-top: 2px;
+}
+
+.breadth-bar {
+  display: flex;
+  height: 8px;
+  width: 100%;
+  border-radius: 4px;
+  overflow: hidden;
+  background: #e2e8f0;
+}
+
+.breadth-bar__segment--adv {
+  background-color: var(--color-positive);
+}
+
+.breadth-bar__segment--dec {
+  background-color: var(--color-negative);
+}
+
+.breadth-bar__segment--unc {
+  background-color: var(--color-neutral);
+}
+
+/* Sector Performance */
+.methodology-tag {
+  font-size: 0.72rem;
+  font-weight: 600;
+  background: #f1f5f9;
+  color: #475569;
+  padding: 3px 8px;
+  border-radius: 4px;
+  border: 1px solid #e2e8f0;
+}
+
+.sector-name {
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.sector-breadth {
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.text-adv {
+  color: var(--color-positive);
+}
+
+.text-dec {
+  color: var(--color-negative);
+}
+
+.text-unc {
+  color: var(--color-neutral);
+}
+
+/* Market Heatmap */
+.heatmap-controls {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.heatmap-select {
+  padding: 4px 8px;
+  border-radius: 4px;
+  border: 1px solid #cbd5e1;
+  background: #ffffff;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: #334155;
+  cursor: pointer;
+}
+
+.heatmap-container {
+  min-height: 240px;
+}
+
+.heatmap-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+  gap: 4px;
+}
+
+.heatmap-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 6px;
+  border-radius: 4px;
+  color: #ffffff;
+  text-decoration: none;
+  transition: transform 0.1s ease, filter 0.1s ease;
+  min-height: 64px;
+}
+
+.heatmap-tile:hover {
+  transform: scale(1.03);
+  filter: brightness(1.1);
+  z-index: 2;
+}
+
+.heatmap-tile__symbol {
+  font-size: 0.85rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.heatmap-tile__change {
+  font-size: 0.75rem;
+  font-weight: 600;
+  margin-top: 2px;
+}
+
+.heatmap-tile__price {
+  font-size: 0.68rem;
+  opacity: 0.85;
+  margin-top: 1px;
+}
+
+.heatmap-legend {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-4);
+  margin-top: var(--space-3);
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: #64748b;
+}
+
+.legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.legend-swatch {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
 }
 
 .data-panel__heading {
@@ -831,3 +1048,17 @@ tbody th {
     grid-template-columns: repeat(2, 1fr);
   }
 }
+.app-header__nav { display:flex; gap:0.85rem; align-items:center; }
+.app-header__nav a, .app-header__mobile-nav a { color:var(--text-muted); text-decoration:none; font-size:0.85rem; font-weight:600; }
+.app-header__nav a.active, .app-header__mobile-nav a.active { color:var(--accent); }
+.app-header__mobile-nav { display:none; }
+.analytics-page { max-width:1400px; margin:0 auto; padding:2rem clamp(1rem,3vw,3rem); }
+.dashboard-action-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:1rem; margin-top:1.25rem; }
+.dashboard-action-card { display:flex; flex-direction:column; gap:.35rem; padding:1rem; border:1px solid var(--border); border-radius:.75rem; background:var(--surface); text-decoration:none; color:inherit; }
+.dashboard-action-card strong { color:var(--text); }
+.dashboard-action-card span { color:var(--text-muted); font-size:.85rem; }
+.market-tables > .data-panel { min-width:0; }
+.data-panel__heading { flex-wrap:wrap; }
+@media (max-width: 900px) { .app-header { flex-wrap:wrap; } .app-header__nav { order:4; width:100%; justify-content:center; } .app-header__meta { margin-left:auto; } .dashboard-action-grid { grid-template-columns:1fr; } }
+@media (max-width: 700px) { .app-header__nav { display:none; } .app-header__mobile-nav { display:block; order:3; } .app-header__mobile-nav summary { cursor:pointer; color:var(--text-muted); font-weight:600; } .app-header__mobile-nav nav { display:flex; flex-direction:column; gap:.5rem; padding:.6rem 0; } .app-header__meta { width:100%; margin-left:0; flex-wrap:wrap; } .breadth-summary { grid-template-columns:repeat(2,minmax(0,1fr)); } .analytics-page { padding:1.25rem .85rem; } }
+@media (max-width: 480px) { .app-header { padding:.8rem; gap:.65rem; } .app-header__identity { min-width:0; } .app-header__section { display:none; } .stock-search { width:100%; max-width:100%; order:5; } .heatmap-grid { grid-template-columns:repeat(2,minmax(0,1fr)); } .heatmap-legend { justify-content:flex-start; flex-wrap:wrap; } .metric-grid { grid-template-columns:repeat(2,minmax(0,1fr)); } }

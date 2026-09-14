@@ -13,6 +13,7 @@ class InstrumentRepository(ABC):
         symbol: str,
         company_name: str,
         sector: str | None = None,
+        security_type: str = "EQUITY",
     ) -> Instrument:
         """Insert or update an instrument record."""
 
@@ -34,17 +35,20 @@ class PostgresInstrumentRepository(InstrumentRepository):
         symbol: str,
         company_name: str,
         sector: str | None = None,
+        security_type: str = "EQUITY",
     ) -> Instrument:
         existing = self._session.get(Instrument, symbol)
         if existing is not None:
             existing.company_name = company_name
             existing.sector = sector
+            existing.security_type = security_type
             return existing
 
         instrument = Instrument(
             symbol=symbol,
             company_name=company_name,
             sector=sector,
+            security_type=security_type,
             created_at=datetime.now(tz=timezone.utc),
         )
         self._session.add(instrument)

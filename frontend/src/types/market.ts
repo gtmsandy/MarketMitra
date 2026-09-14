@@ -7,6 +7,8 @@ export type MarketOverview = {
   total_transactions: number | null
   market_status: string
   last_updated: string
+  observation_date?: string | null
+  data_freshness?: string
 }
 
 export type MarketMover = {
@@ -15,6 +17,7 @@ export type MarketMover = {
   ltp: number
   change_percent: number
   volume: number
+  observation_date?: string | null
 }
 
 export type MostActiveStock = {
@@ -23,6 +26,7 @@ export type MostActiveStock = {
   ltp: number
   volume: number
   turnover: number
+  observation_date?: string | null
 }
 
 export type StockQuote = {
@@ -37,6 +41,8 @@ export type StockQuote = {
   previous_close: number
   volume: number
   last_updated: string
+  stock_observation_date?: string | null
+  market_snapshot_date?: string | null
 }
 
 export type PriceHistoryPoint = {
@@ -74,5 +80,44 @@ export type StockDetail = {
   last_updated: string
   fifty_two_week_high: number
   fifty_two_week_low: number
+  stock_observation_date?: string | null
+  market_snapshot_date?: string | null
 }
 
+export type MarketBreadth = {
+  observation_date: string
+  advancing_count: number
+  declining_count: number
+  unchanged_count: number
+  total_count: number
+  advance_decline_ratio: number | null
+  advancing_percent: number
+  declining_percent: number
+  unchanged_percent: number
+}
+
+export type SectorPerformance = {
+  sector: string
+  stock_count: number
+  advancing_count: number
+  declining_count: number
+  unchanged_count: number
+  average_change_percent: number
+  total_volume: number
+  total_turnover: number
+  observation_date: string
+  methodology: string
+}
+
+export type HeatmapItem = {
+  symbol: string
+  company_name: string
+  sector: string | null
+  ltp: number
+  change: number
+  change_percent: number
+  volume: number
+  turnover: number
+  observation_date: string
+  weight_metric: string
+}

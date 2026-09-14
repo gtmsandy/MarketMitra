@@ -55,6 +55,9 @@ class IngestionService:
         try:
             report = self._execute(started_at)
         except Exception as exc:
+            # Roll back every staged market-data mutation before recording only
+            # the failure audit row. This prevents partial flushes from commit.
+            self._session.rollback()
             finished_at = datetime.now(tz=timezone.utc)
             report = IngestionReport(
                 source=self._source.name,
@@ -86,6 +89,7 @@ class IngestionService:
                 symbol=rec.symbol,
                 company_name=rec.company_name,
                 sector=rec.sector,
+                security_type=getattr(rec, "security_type", "EQUITY"),
             )
         self._session.flush()
         report.instruments_upserted = len(raw_instruments)

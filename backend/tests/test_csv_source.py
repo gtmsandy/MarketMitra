@@ -33,8 +33,8 @@ class TestCsvParsingUtilities:
 
 
 class TestCsvDataSourceFeatures:
-    def test_column_alias_mapping_and_turnover_derivation(self, tmp_path: Path) -> None:
-        # Create CSV using unconventional aliases and missing turnover
+    def test_column_alias_mapping_preserves_missing_turnover(self, tmp_path: Path) -> None:
+        # Missing turnover remains missing; ingestion validation rejects it.
         stock_file = tmp_path / "custom_stocks.csv"
         with open(stock_file, "w", newline="", encoding="utf-8") as fp:
             w = csv.writer(fp)
@@ -51,8 +51,7 @@ class TestCsvDataSourceFeatures:
 
         prices = source.fetch_prices("NABIL")
         assert len(prices) == 2
-        # Turnover derived: 1010.0 * 500 = 505000.0
-        assert prices[0].turnover == 505000.0
+        assert prices[0].turnover is None
         # Previous close derivation
         assert prices[1].previous_close == 1010.0
         assert prices[1].change == 15.0
@@ -83,8 +82,8 @@ class TestCsvDataSourceFeatures:
         dup_file = tmp_path / "dup_stocks.csv"
         with open(dup_file, "w", newline="", encoding="utf-8") as fp:
             w = csv.writer(fp)
-            w.writerow(["Date", "Symbol", "Open", "High", "Low", "Close", "Volume"])
-            w.writerow(["2024-01-01", "NABIL", "500.0", "510.0", "495.0", "505.0", "1000"])
+            w.writerow(["Date", "Symbol", "Open", "High", "Low", "Close", "Volume", "Turnover"])
+            w.writerow(["2024-01-01", "NABIL", "500.0", "510.0", "495.0", "505.0", "1000", "505000"])
             # Duplicate date with different close - first-seen must win
             w.writerow(["2024-01-01", "NABIL", "500.0", "510.0", "495.0", "999.0", "2000"])
 
@@ -97,9 +96,9 @@ class TestCsvDataSourceFeatures:
         zero_file = tmp_path / "zero_stocks.csv"
         with open(zero_file, "w", newline="", encoding="utf-8") as fp:
             w = csv.writer(fp)
-            w.writerow(["Date", "Symbol", "Open", "High", "Low", "Close", "Volume"])
-            w.writerow(["2024-01-01", "NABIL", "0.0", "510.0", "495.0", "505.0", "1000"])  # zero open
-            w.writerow(["2024-01-02", "NABIL", "500.0", "510.0", "495.0", "505.0", "1000"])  # valid
+            w.writerow(["Date", "Symbol", "Open", "High", "Low", "Close", "Volume", "Turnover"])
+            w.writerow(["2024-01-01", "NABIL", "0.0", "510.0", "495.0", "505.0", "1000", "505000"])  # zero open
+            w.writerow(["2024-01-02", "NABIL", "500.0", "510.0", "495.0", "505.0", "1000", "505000"])  # valid
 
         source = CsvDataSource(stock_file=zero_file)
         prices = source.fetch_prices("NABIL")
@@ -183,6 +182,41 @@ class TestCsvDataSourceFeatures:
         assert instruments[0].sector == "Hydro Power"
 
 
+    def test_security_type_and_sector_mapping_from_folders(self, tmp_path: Path) -> None:
+        """Verify folder names map deterministically to security_type and clean sector."""
+        root_dir = tmp_path / "Nepse_Data"
+        root_dir.mkdir()
+
+        folder_expectations = [
+            ("Commercial_Banks", "EQUITY", "Commercial Banks"),
+            ("Promoter_Share", "PROMOTER_SHARE", None),
+            ("Corporate_Debentures", "DEBENTURE", None),
+            ("Mutual_Fund", "MUTUAL_FUND", None),
+            ("Government_Bonds", "GOVERNMENT_BOND", None),
+            ("Preference_Share", "PREFERENCE_SHARE", None),
+            ("Hydro_Power", "EQUITY", "Hydro Power"),
+        ]
+
+        for folder_name, exp_type, exp_sector in folder_expectations:
+            f_dir = root_dir / folder_name
+            f_dir.mkdir()
+            sym = folder_name[:4].upper()
+            csv_file = f_dir / f"{sym}.csv"
+            with open(csv_file, "w", newline="", encoding="utf-8") as fp:
+                w = csv.writer(fp)
+                w.writerow(["Date", "Close"])
+                w.writerow(["2024-01-01", "100.0"])
+
+        source = CsvDataSource(stock_file=str(root_dir))
+        instruments = {i.symbol: i for i in source.fetch_instruments()}
+
+        for folder_name, exp_type, exp_sector in folder_expectations:
+            sym = folder_name[:4].upper()
+            assert sym in instruments
+            inst = instruments[sym]
+            assert inst.security_type == exp_type, f"Wrong security_type for {folder_name}: {inst.security_type} != {exp_type}"
+            assert inst.sector == exp_sector, f"Wrong sector for {folder_name}: {inst.sector} != {exp_sector}"
+
 class TestIngestionServiceWithCsvSource:
     def test_e2e_ingestion_service_with_csv(self, tmp_path: Path) -> None:
         stock_file = tmp_path / "e2e_stocks.csv"
@@ -233,7 +267,7 @@ class TestIngestionServiceWithCsvSource:
         stock_file = tmp_path / "dry_stocks.csv"
         with open(stock_file, "w", newline="", encoding="utf-8") as fp:
             w = csv.writer(fp)
-            w.writerow(["Date", "Symbol", "Open", "High", "Low", "Close", "Volume"])
+            w.writerow(["Date", "Symbol", "Open", "High", "Low", "Close", "Volume", "Turnover"])
             w.writerow(["2024-01-01", "NABIL", "500.0", "510.0", "495.0", "505.0", "1000"])
 
         db_url = f"sqlite:///{tmp_path / 'dry_run.db'}"
@@ -272,8 +306,8 @@ class TestIngestionServiceWithCsvSource:
         stock_file = tmp_path / "new_stock.csv"
         with open(stock_file, "w", newline="", encoding="utf-8") as fp:
             w = csv.writer(fp)
-            w.writerow(["Date", "Symbol", "Open", "High", "Low", "Close", "Volume"])
-            w.writerow(["2024-01-01", "NEWSYM", "100.0", "110.0", "95.0", "105.0", "500"])
+            w.writerow(["Date", "Symbol", "Open", "High", "Low", "Close", "Volume", "Turnover"])
+            w.writerow(["2024-01-01", "NEWSYM", "100.0", "110.0", "95.0", "105.0", "500", "52500"])
 
         with factory() as session:
             source = CsvDataSource(stock_file=stock_file)

@@ -1,4 +1,4 @@
-import { Link } from 'react-router-dom'
+import { Link, NavLink } from 'react-router-dom'
 
 import type { MarketOverview } from '../types/market'
 import { formatObservationDate } from '../utils/formatters'
@@ -16,9 +16,8 @@ function AppHeader({ overview }: AppHeaderProps) {
   else if (rawStatus === 'DATA_UNAVAILABLE') statusClass = 'unavailable'
   else if (rawStatus === 'STALE') statusClass = 'stale'
 
-  // Determine data freshness badge
-  const dataBadge = rawStatus === 'OPEN' ? 'LIVE' : 'HISTORICAL'
-  const badgeClass = rawStatus === 'OPEN' ? 'market-badge--live' : 'market-badge--historical'
+  const dataBadge = overview?.data_freshness?.replace('_', ' ') ?? (rawStatus === 'OPEN' ? 'LIVE' : 'HISTORICAL')
+  const badgeClass = dataBadge === 'LIVE' ? 'market-badge--live' : 'market-badge--historical'
   return (
     <header className="app-header">
       <div className="app-header__identity">
@@ -27,7 +26,11 @@ function AppHeader({ overview }: AppHeaderProps) {
         </Link>
         <span className="app-header__section">Market Dashboard</span>
       </div>
+      <nav className="app-header__nav" aria-label="Primary navigation">
+        <NavLink to="/" end>Dashboard</NavLink><NavLink to="/market/movers">Movers</NavLink><NavLink to="/market/sectors">Sectors</NavLink><NavLink to="/market/heatmap">Heatmap</NavLink>
+      </nav>
       <StockSearch />
+      <details className="app-header__mobile-nav"><summary>Menu</summary><nav aria-label="Mobile navigation"><NavLink to="/" end>Dashboard</NavLink><NavLink to="/market/movers">Movers</NavLink><NavLink to="/market/sectors">Sectors</NavLink><NavLink to="/market/heatmap">Heatmap</NavLink></nav></details>
       <div className="app-header__meta">
         {overview ? (
           <>
@@ -36,10 +39,10 @@ function AppHeader({ overview }: AppHeaderProps) {
             </span>
             <span className={`market-badge ${badgeClass}`}>{dataBadge}</span>
             <span>Last Updated {formatObservationDate(overview.last_updated)}</span>
-            <span>Database records</span>
+            <span>Snapshot {overview.observation_date ?? '—'}</span>
           </>
         ) : (
-          <span>Database records</span>
+          <span>Market data loading</span>
         )}
       </div>
     </header>

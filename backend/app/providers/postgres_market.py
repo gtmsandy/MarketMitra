@@ -2,9 +2,12 @@ from datetime import date, datetime, timezone
 from sqlalchemy.orm import Session
 
 from app.models.market import (
+    HeatmapItem,
+    MarketBreadth,
     MarketMover,
     MarketOverview,
     MostActiveStock,
+    SectorPerformance,
     StockQuote,
 )
 from app.models.stock import IntradayPricePoint, PriceHistoryPoint, StockDetail
@@ -47,6 +50,8 @@ class PostgresMarketProvider(MarketDataProvider):
             total_transactions=snapshot.total_transactions,
             market_status=snapshot.market_status,
             last_updated=snapshot.captured_at,
+            observation_date=snapshot.captured_at.date().isoformat(),
+            data_freshness="HISTORICAL",
         )
 
     # ------------------------------------------------------------------
@@ -54,19 +59,22 @@ class PostgresMarketProvider(MarketDataProvider):
     # ------------------------------------------------------------------
 
     def get_top_gainers(self) -> list[MarketMover]:
-        latest_prices = self._get_all_latest_prices()
+        session_date = self._prices.get_common_session_date()
+        latest_prices = self._prices.get_prices_for_session(session_date) if session_date else []
         gainers = [p for p in latest_prices if p.change_percent > 0]
         gainers.sort(key=lambda p: p.change_percent, reverse=True)
         return [self._to_market_mover(p) for p in gainers]
 
     def get_top_losers(self) -> list[MarketMover]:
-        latest_prices = self._get_all_latest_prices()
+        session_date = self._prices.get_common_session_date()
+        latest_prices = self._prices.get_prices_for_session(session_date) if session_date else []
         losers = [p for p in latest_prices if p.change_percent < 0]
         losers.sort(key=lambda p: p.change_percent)
         return [self._to_market_mover(p) for p in losers]
 
     def get_most_active(self) -> list[MostActiveStock]:
-        latest_prices = self._get_all_latest_prices()
+        session_date = self._prices.get_common_session_date()
+        latest_prices = self._prices.get_prices_for_session(session_date) if session_date else []
         active = sorted(latest_prices, key=lambda p: p.turnover, reverse=True)
         result = []
         for price in active:
@@ -79,6 +87,7 @@ class PostgresMarketProvider(MarketDataProvider):
                 ltp=price.close,
                 volume=price.volume,
                 turnover=price.turnover,
+                observation_date=price.date,
             ))
         return result
 
@@ -123,20 +132,16 @@ class PostgresMarketProvider(MarketDataProvider):
             return None
 
         history = self._prices.get_by_symbol(symbol.upper())
-        high_52w = max((p.high for p in history), default=price.high)
-        low_52w = min((p.low for p in history), default=price.low)
-        high_52w = max(high_52w, price.high)
-        low_52w = min(low_52w, price.low)
+        from datetime import timedelta
+        latest_date = date.fromisoformat(price.date)
+        window_start = latest_date - timedelta(weeks=52)
+        window = [p for p in history if window_start <= date.fromisoformat(p.date) <= latest_date]
+        high_52w = max((p.high for p in window), default=price.high)
+        low_52w = min((p.low for p in window), default=price.low)
 
         price_date = date.fromisoformat(price.date)
         latest_snapshot = self._snapshots.get_latest()
-        if (
-            latest_snapshot is not None
-            and latest_snapshot.captured_at.date() >= price_date
-        ):
-            last_updated = latest_snapshot.captured_at
-        else:
-            last_updated = datetime.fromisoformat(f"{price.date}T00:00:00+00:00")
+        last_updated = datetime.fromisoformat(f"{price.date}T00:00:00+00:00")
         return StockDetail(
             symbol=instrument.symbol,
             company_name=instrument.company_name,
@@ -151,6 +156,8 @@ class PostgresMarketProvider(MarketDataProvider):
             last_updated=last_updated,
             fifty_two_week_high=round(high_52w, 2),
             fifty_two_week_low=round(low_52w, 2),
+            stock_observation_date=price.date,
+            market_snapshot_date=latest_snapshot.captured_at if latest_snapshot else None,
         )
 
     def get_stock_history(self, symbol: str) -> list[PriceHistoryPoint] | None:
@@ -190,13 +197,26 @@ class PostgresMarketProvider(MarketDataProvider):
             for q in quotes
         ]
 
+    def get_market_breadth(self) -> MarketBreadth:
+        return self._prices.get_market_breadth(security_type="EQUITY")
+
+    def get_sector_analytics(self) -> list[SectorPerformance]:
+        return self._prices.get_sector_analytics(security_type="EQUITY")
+
+    def get_market_heatmap(self) -> list[HeatmapItem]:
+        return self._prices.get_market_heatmap(security_type="EQUITY")
+
     # ------------------------------------------------------------------
     # Helpers
     # ------------------------------------------------------------------
 
-    def _get_all_latest_prices(self):
-        """Return the latest DailyPrice row for every instrument."""
+    def _get_all_latest_prices(self, security_type: str | None = "EQUITY"):
+        """Return the latest DailyPrice row for every instrument, optionally filtered by security_type."""
         instruments = self._instruments.get_all()
+        if security_type:
+            instruments = [
+                i for i in instruments if getattr(i, "security_type", "EQUITY") == security_type
+            ]
         prices = []
         for instrument in instruments:
             price = self._prices.get_latest_by_symbol(instrument.symbol)
@@ -212,6 +232,7 @@ class PostgresMarketProvider(MarketDataProvider):
             ltp=price.close,
             change_percent=price.change_percent,
             volume=price.volume,
+            observation_date=price.date,
         )
 
     @staticmethod
@@ -221,13 +242,11 @@ class PostgresMarketProvider(MarketDataProvider):
         snapshot_timestamp: datetime | None = None,
     ) -> StockQuote:
         price_date = date.fromisoformat(price.date)
-        if (
-            snapshot_timestamp is not None
-            and snapshot_timestamp.date() >= price_date
-        ):
-            last_updated = snapshot_timestamp
-        else:
-            last_updated = datetime.fromisoformat(f"{price.date}T00:00:00+00:00")
+        last_updated = (
+            snapshot_timestamp
+            if snapshot_timestamp is not None and snapshot_timestamp.date() >= price_date
+            else datetime.fromisoformat(f"{price.date}T00:00:00+00:00")
+        )
 
         return StockQuote(
             symbol=instrument.symbol,
@@ -241,4 +260,6 @@ class PostgresMarketProvider(MarketDataProvider):
             previous_close=price.previous_close,
             volume=price.volume,
             last_updated=last_updated,
+            stock_observation_date=price.date,
+            market_snapshot_date=snapshot_timestamp,
         )

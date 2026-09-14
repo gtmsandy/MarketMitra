@@ -46,18 +46,23 @@ function StockDetailPage() {
   }, [symbol])
 
   useEffect(() => {
-    void loadStock()
+    const timer = window.setTimeout(() => { void loadStock() }, 0)
+    return () => window.clearTimeout(timer)
   }, [loadStock])
 
   // Lazy-load intraday observations when 1D is selected
   useEffect(() => {
     if (timeframe === '1D' && symbol && intraday === null) {
-      setIsIntradayLoading(true)
-      getStockIntraday(symbol)
-        .then((data) => setIntraday(data))
-        .catch(() => setIntraday([]))
-        .finally(() => setIsIntradayLoading(false))
+      const timer = window.setTimeout(() => {
+        setIsIntradayLoading(true)
+        getStockIntraday(symbol)
+          .then((data) => setIntraday(data))
+          .catch(() => setIntraday([]))
+          .finally(() => setIsIntradayLoading(false))
+      }, 0)
+      return () => window.clearTimeout(timer)
     }
+    return undefined
   }, [timeframe, symbol, intraday])
 
   const chartData = useMemo(() => {

@@ -90,6 +90,15 @@ class IngestionValidator:
 
         errors: list[ValidationError] = []
 
+        for field_name in ("open", "high", "low", "close", "volume", "turnover"):
+            if getattr(record, field_name) is None:
+                errors.append(ValidationError(
+                    rule="required_field", field=field_name, value=None,
+                    message=f"{field_name} is required and cannot be missing.",
+                ))
+        if errors:
+            return errors
+
         # --------------------------------------------------------------
         # Symbol validation
         # --------------------------------------------------------------
@@ -225,17 +234,9 @@ class IngestionValidator:
                     )
                 )
 
-            if mode == "strict":
-
-                # ------------------------------------------------------
-                # Strict mode
-                # ------------------------------------------------------
-                #
-                # Canonical/live market data must satisfy complete OHLC
-                # bounds.
-                #
-
-                if record.high < record.open:
+            # Every accepted bar must satisfy canonical OHLC bounds. Historical
+            # mode may relax date/change conventions, but never price ordering.
+            if record.high < record.open:
                     errors.append(
                         ValidationError(
                             rule="ohlc_consistency",
@@ -248,7 +249,7 @@ class IngestionValidator:
                         )
                     )
 
-                if record.low > record.open:
+            if record.low > record.open:
                     errors.append(
                         ValidationError(
                             rule="ohlc_consistency",
@@ -261,7 +262,7 @@ class IngestionValidator:
                         )
                     )
 
-                if record.high < record.close:
+            if record.high < record.close:
                     errors.append(
                         ValidationError(
                             rule="ohlc_consistency",
@@ -274,7 +275,7 @@ class IngestionValidator:
                         )
                     )
 
-                if record.low > record.close:
+            if record.low > record.close:
                     errors.append(
                         ValidationError(
                             rule="ohlc_consistency",

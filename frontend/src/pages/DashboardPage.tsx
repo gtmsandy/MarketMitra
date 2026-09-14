@@ -1,17 +1,22 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { Link } from 'react-router-dom'
 
 import {
+  getMarketBreadth,
   getMarketOverview,
-  getMostActiveStocks,
   getTopGainers,
   getTopLosers,
 } from '../api/market'
 import ErrorState from '../components/ErrorState'
 import LoadingState from '../components/LoadingState'
+import MarketBreadthCard from '../components/MarketBreadthCard'
 import MarketMetricCard from '../components/MarketMetricCard'
 import MarketMoversTable from '../components/MarketMoversTable'
-import MostActiveTable from '../components/MostActiveTable'
-import type { MarketMover, MarketOverview, MostActiveStock } from '../types/market'
+import type {
+  MarketBreadth,
+  MarketMover,
+  MarketOverview,
+} from '../types/market'
 import {
   formatCompactNpr,
   formatInteger,
@@ -25,14 +30,10 @@ type DashboardData = {
   overview: MarketOverview
   gainers: MarketMover[]
   losers: MarketMover[]
-  mostActive: MostActiveStock[]
+  breadth: MarketBreadth | null
 }
 
-type DashboardPageProps = {
-  onOverviewLoaded: (overview: MarketOverview) => void
-}
-
-function DashboardPage({ onOverviewLoaded }: DashboardPageProps) {
+function DashboardPage() {
   const [dashboardData, setDashboardData] = useState<DashboardData | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [hasError, setHasError] = useState(false)
@@ -43,44 +44,46 @@ function DashboardPage({ onOverviewLoaded }: DashboardPageProps) {
     setHasError(false)
 
     try {
-      const [overview, gainers, losers, mostActive] = await Promise.all([
-        getMarketOverview(),
-        getTopGainers(),
-        getTopLosers(),
-        getMostActiveStocks(),
-      ])
+      const [overview, gainers, losers, breadth] =
+        await Promise.all([
+          getMarketOverview(),
+          getTopGainers(),
+          getTopLosers(),
+          getMarketBreadth().catch(() => null),
+        ])
 
-      setDashboardData({ overview, gainers, losers, mostActive })
-      onOverviewLoaded(overview)
+      setDashboardData({ overview, gainers, losers, breadth })
     } catch {
       setDashboardData(null)
       setHasError(true)
     } finally {
       setIsLoading(false)
     }
-  }, [onOverviewLoaded])
+  }, [])
 
   const refreshData = useCallback(async () => {
     if (isRefreshingRef.current) return
     isRefreshingRef.current = true
     try {
-      const [overview, gainers, losers, mostActive] = await Promise.all([
-        getMarketOverview(),
-        getTopGainers(),
-        getTopLosers(),
-        getMostActiveStocks(),
-      ])
-      setDashboardData({ overview, gainers, losers, mostActive })
-      onOverviewLoaded(overview)
+      const [overview, gainers, losers, breadth] =
+        await Promise.all([
+          getMarketOverview(),
+          getTopGainers(),
+          getTopLosers(),
+          getMarketBreadth().catch(() => null),
+        ])
+
+      setDashboardData({ overview, gainers, losers, breadth })
     } catch {
       // Background poll failure: preserve existing dashboard state without disruption
     } finally {
       isRefreshingRef.current = false
     }
-  }, [onOverviewLoaded])
+  }, [])
 
   useEffect(() => {
-    void loadDashboard()
+    const timer = window.setTimeout(() => { void loadDashboard() }, 0)
+    return () => window.clearTimeout(timer)
   }, [loadDashboard])
 
   // Auto-refresh: 30s polling only when market status is OPEN
@@ -101,7 +104,7 @@ function DashboardPage({ onOverviewLoaded }: DashboardPageProps) {
     return <ErrorState onRetry={() => void loadDashboard()} />
   }
 
-  const { overview, gainers, losers, mostActive } = dashboardData
+  const { overview, gainers, losers, breadth } = dashboardData
   const indexChange = `${formatSignedNumber(overview.index_change)} (${formatPercentage(overview.index_change_percent)})`
 
   return (
@@ -140,10 +143,18 @@ function DashboardPage({ onOverviewLoaded }: DashboardPageProps) {
         </div>
       </section>
 
+      <div className="dashboard-analytics-grid">
+        <MarketBreadthCard breadth={breadth} />
+      </div>
+
       <section className="market-tables" aria-label="Market activity">
-        <MarketMoversTable title="Top Gainers" rows={gainers} limit={10} />
-        <MarketMoversTable title="Top Losers" rows={losers} limit={10} />
-        <MostActiveTable rows={mostActive} limit={15} />
+        <MarketMoversTable title="Top Equity Gainers" rows={gainers} limit={10} />
+        <MarketMoversTable title="Top Equity Losers" rows={losers} limit={10} />
+      </section>
+      <section className="dashboard-action-grid" aria-label="More market analytics">
+        <Link className="dashboard-action-card" to="/market/movers"><strong>All market movers</strong><span>Gainers, losers and most active equities</span></Link>
+        <Link className="dashboard-action-card" to="/market/sectors"><strong>Sector performance</strong><span>Compare common equity sectors</span></Link>
+        <Link className="dashboard-action-card" to="/market/heatmap"><strong>Market heatmap</strong><span>Scan performance across the session</span></Link>
       </section>
     </main>
   )

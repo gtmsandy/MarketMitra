@@ -411,4 +411,39 @@ class TestPreProductionGate:
         db_session.add(q2)
         with pytest.raises(IntegrityError):
             db_session.flush()
+
+    def test_k_security_type_filtering_isolates_equities(self, db_session: Session) -> None:
+        """K. Analytical universes filter on security_type = 'EQUITY', excluding promoter shares and debentures."""
+        inst_eq = Instrument(symbol="EQ1", company_name="Equity Corp", sector="Commercial Banks", security_type="EQUITY", created_at=datetime.now(tz=timezone.utc))
+        inst_po = Instrument(symbol="PO1", company_name="Promoter Corp", sector="Promoter Share", security_type="PROMOTER_SHARE", created_at=datetime.now(tz=timezone.utc))
+        inst_deb = Instrument(symbol="DEB1", company_name="Debenture Corp", sector="Corporate Debentures", security_type="DEBENTURE", created_at=datetime.now(tz=timezone.utc))
+
+        p_eq = DailyPrice(symbol="EQ1", date="2026-09-03", open=100.0, high=105.0, low=99.0, close=102.0, volume=1000, turnover=102000.0, change=2.0, change_percent=2.0, previous_close=100.0)
+        p_po = DailyPrice(symbol="PO1", date="2026-09-03", open=500.0, high=550.0, low=480.0, close=550.0, volume=50, turnover=27500.0, change=50.0, change_percent=10.0, previous_close=500.0)
+        p_deb = DailyPrice(symbol="DEB1", date="2026-09-03", open=1000.0, high=1000.0, low=1000.0, close=1000.0, volume=10, turnover=10000.0, change=0.0, change_percent=0.0, previous_close=1000.0)
+
+        db_session.add_all([inst_eq, inst_po, inst_deb, p_eq, p_po, p_deb])
+        db_session.commit()
+
+        from app.repositories.price_repository import PostgresDailyPriceRepository
+        price_repo = PostgresDailyPriceRepository(db_session)
+
+        # Breadth filtered to EQUITY
+        breadth = price_repo.get_market_breadth(session_date="2026-09-03", security_type="EQUITY")
+        assert breadth.total_count == 1
+        assert breadth.advancing_count == 1
+
+        # Sectors filtered to EQUITY
+        sectors = price_repo.get_sector_analytics(security_type="EQUITY")
+        sec_names = [s.sector for s in sectors]
+        assert "Commercial Banks" in sec_names
+        assert "Promoter Share" not in sec_names
+        assert "Corporate Debentures" not in sec_names
+
+        # Heatmap filtered to EQUITY
+        heatmap = price_repo.get_market_heatmap(security_type="EQUITY")
+        hm_symbols = [h.symbol for h in heatmap]
+        assert "EQ1" in hm_symbols
+        assert "PO1" not in hm_symbols
+        assert "DEB1" not in hm_symbols
         db_session.rollback()

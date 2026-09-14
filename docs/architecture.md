@@ -4,7 +4,7 @@
 
 MarketMitra will begin as a **modular monolith**. The project will have one frontend application and one backend application, with clearly separated modules inside the backend. This keeps local development and deployment simple while preserving boundaries that support later growth.
 
-The initial system uses mock market data and no database. PostgreSQL and a real NEPSE provider are planned extensions, not prerequisites for validating the first user experience.
+The system supports a mock provider for development and a PostgreSQL-backed provider for historical market analytics. A real NEPSE provider remains a swappable future integration.
 
 ```text
 Browser
@@ -19,8 +19,8 @@ FastAPI backend
   |- Domain/services layer
   |- Market data provider abstraction
   |- Mock Market Data Provider
-  `- Repository abstraction (future)
-       `- PostgreSQL implementation (future)
+  |- PostgreSQL Market Data Provider
+  `- Repository abstractions
 ```
 
 ## Frontend and backend separation
@@ -45,9 +45,9 @@ The first implementation is the Mock Market Data Provider. It should be determin
 
 Later, a NEPSE provider can implement the same interface. Source-specific concerns—fetching, parsing, retries, mapping, and timestamps—remain inside that implementation. The API layer and frontend should not need to change merely because the provider changes.
 
-## Future database integration
+## Database integration
 
-PostgreSQL is deliberately deferred until the mock-data MVP validates the user flows and API shape. When introduced, persistence should sit behind repository interfaces so domain services do not depend directly on SQLAlchemy queries.
+PostgreSQL persistence sits behind repository interfaces so domain services do not depend directly on SQLAlchemy queries.
 
 The likely initial persisted entities are:
 

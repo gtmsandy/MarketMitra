@@ -1,9 +1,12 @@
 from abc import ABC, abstractmethod
 
 from app.models.market import (
+    HeatmapItem,
+    MarketBreadth,
     MarketMover,
     MarketOverview,
     MostActiveStock,
+    SectorPerformance,
     StockQuote,
 )
 from app.models.stock import IntradayPricePoint, PriceHistoryPoint, StockDetail
@@ -45,3 +48,15 @@ class MarketDataProvider(ABC):
     @abstractmethod
     def get_stock_intraday(self, symbol: str) -> list[IntradayPricePoint] | None:
         """Return chronological intraday price observations for a stock, or None if not found."""
+
+    @abstractmethod
+    def get_market_breadth(self) -> MarketBreadth:
+        """Return the market-wide advance-decline breadth metrics."""
+
+    @abstractmethod
+    def get_sector_analytics(self) -> list[SectorPerformance]:
+        """Return aggregate performance and breadth by sector."""
+
+    @abstractmethod
+    def get_market_heatmap(self) -> list[HeatmapItem]:
+        """Return equity items formatted for the market heatmap."""

@@ -1,10 +1,13 @@
 import { fetchJson } from './client'
 import type {
+  HeatmapItem,
   IntradayPricePoint,
+  MarketBreadth,
   MarketMover,
   MarketOverview,
   MostActiveStock,
   PriceHistoryPoint,
+  SectorPerformance,
   StockDetail,
   StockQuote,
 } from '../types/market'
@@ -43,5 +46,17 @@ export function getStockHistory(symbol: string): Promise<PriceHistoryPoint[]> {
 
 export function getStockIntraday(symbol: string): Promise<IntradayPricePoint[]> {
   return fetchJson(`/api/v1/stocks/${encodeURIComponent(symbol)}/intraday`)
+}
+
+export function getMarketBreadth(): Promise<MarketBreadth> {
+  return fetchJson('/api/v1/market/breadth')
+}
+
+export function getSectorAnalytics(): Promise<SectorPerformance[]> {
+  return fetchJson('/api/v1/market/sectors')
+}
+
+export function getMarketHeatmap(): Promise<HeatmapItem[]> {
+  return fetchJson('/api/v1/market/heatmap')
 }
 

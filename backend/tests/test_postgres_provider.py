@@ -17,6 +17,7 @@ from app.providers.mock_market import MockMarketProvider
 from app.repositories.instrument_repository import PostgresInstrumentRepository
 from app.repositories.market_repository import PostgresMarketSnapshotRepository
 from app.repositories.price_repository import DailyPriceRow, PostgresDailyPriceRepository
+from app.db.models import DailyPrice
 
 
 # ---------------------------------------------------------------------------
@@ -186,6 +187,19 @@ class TestPostgresMarketProviderMostActive:
 
 
 class TestPostgresMarketProviderStocks:
+
+    def test_market_analytics_share_one_common_session(self, seeded_session: Session) -> None:
+        provider = PostgresMarketProvider(seeded_session)
+        assert {row.observation_date for row in provider.get_top_gainers()} == {"2026-09-03"}
+        assert {row.observation_date for row in provider.get_top_losers()} == {"2026-09-03"}
+        assert {row.observation_date for row in provider.get_most_active()} == {"2026-09-03"}
+
+    def test_stock_detail_52_week_window_excludes_older_bar(self, seeded_session: Session) -> None:
+        seeded_session.add(DailyPrice(symbol="NABIL", date="2024-01-01", open=1, high=99999, low=1, close=1, volume=1, turnover=1, previous_close=1))
+        seeded_session.commit()
+        detail = PostgresMarketProvider(seeded_session).get_stock_detail("NABIL")
+        assert detail is not None
+        assert detail.fifty_two_week_high < 99999
     def test_get_stocks_returns_all_instruments(self, seeded_session: Session) -> None:
         provider = PostgresMarketProvider(seeded_session)
         stocks = provider.get_stocks()

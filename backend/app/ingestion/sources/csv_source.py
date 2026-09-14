@@ -114,11 +114,28 @@ class CsvDataSource(DataSource):
             else:
                 raw_folder_sector = None
 
-            sector_from_folder = (
-                raw_folder_sector.replace("_", " ").strip()
-                if raw_folder_sector
-                else None
-            )
+            if raw_folder_sector == "Promoter_Share":
+                security_type_from_folder = "PROMOTER_SHARE"
+                sector_from_folder = None
+            elif raw_folder_sector == "Corporate_Debentures":
+                security_type_from_folder = "DEBENTURE"
+                sector_from_folder = None
+            elif raw_folder_sector == "Mutual_Fund":
+                security_type_from_folder = "MUTUAL_FUND"
+                sector_from_folder = None
+            elif raw_folder_sector == "Government_Bonds":
+                security_type_from_folder = "GOVERNMENT_BOND"
+                sector_from_folder = None
+            elif raw_folder_sector == "Preference_Share":
+                security_type_from_folder = "PREFERENCE_SHARE"
+                sector_from_folder = None
+            else:
+                security_type_from_folder = "EQUITY"
+                sector_from_folder = (
+                    raw_folder_sector.replace("_", " ").strip()
+                    if raw_folder_sector
+                    else None
+                )
             sym_from_filename = file_path.stem.upper().strip()
             with open(file_path, "r", encoding="utf-8", errors="replace") as fp:
                 rdr = csv.reader(fp)
@@ -178,27 +195,17 @@ class CsvDataSource(DataSource):
                     if c is None:
                         continue
 
-                    o = _parse_float(row[open_idx]) if open_idx is not None and open_idx < len(row) else c
-                    h = _parse_float(row[high_idx]) if high_idx is not None and high_idx < len(row) else c
-                    l = _parse_float(row[low_idx]) if low_idx is not None and low_idx < len(row) else c
-
-                    if o is None:
-                        o = c
-                    if h is None:
-                        h = c
-                    if l is None:
-                        l = c
-
-                    if o <= 0 or h <= 0 or l <= 0 or c <= 0:
+                    o = _parse_float(row[open_idx]) if open_idx is not None and open_idx < len(row) else None
+                    h = _parse_float(row[high_idx]) if high_idx is not None and high_idx < len(row) else None
+                    l = _parse_float(row[low_idx]) if low_idx is not None and low_idx < len(row) else None
+                    # Preserve missing values for the validator; never substitute.
+                    # Persisted rows with required fields missing are rejected there.
+                    if any(value is not None and value <= 0 for value in (o, h, l, c)):
                         continue
-                    # Parse volume and turnover
-                    v = _parse_int(row[vol_idx]) if vol_idx is not None and vol_idx < len(row) else 0
-                    if v is None or v < 0:
-                        v = 0
-
+                    v = _parse_int(row[vol_idx]) if vol_idx is not None and vol_idx < len(row) else None
                     t = _parse_float(row[turnover_idx]) if turnover_idx is not None and turnover_idx < len(row) else None
-                    if t is None or t < 0:
-                        t = round(c * v, 2)
+                    if c is not None and c <= 0:
+                        continue
 
                     # Company name and sector
                     company_name = (
@@ -223,6 +230,7 @@ class CsvDataSource(DataSource):
                             symbol=symbol,
                             company_name=company_name,
                             sector=sector,
+                            security_type=security_type_from_folder,
                         )
 
                     if symbol not in self._prices_by_symbol:
@@ -252,11 +260,15 @@ class CsvDataSource(DataSource):
             for i, p in enumerate(price_records):
                 if i > 0:
                     prev = price_records[i - 1].close
+                    if prev is None or p.close is None:
+                        continue
                     p.previous_close = prev
                     p.change = round(p.close - prev, 4)
                     if p.change_percent == 0.0 and prev > 0:
                         p.change_percent = round((p.change / prev) * 100, 4)
                 else:
+                    if p.open is None or p.close is None:
+                        continue
                     p.previous_close = p.open
                     p.change = round(p.close - p.open, 4)
                     if p.change_percent == 0.0 and p.open > 0:

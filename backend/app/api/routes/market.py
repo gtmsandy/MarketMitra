@@ -4,9 +4,12 @@ from fastapi import APIRouter, Depends
 
 from app.api.dependencies import get_market_service
 from app.models.market import (
+    HeatmapItem,
+    MarketBreadth,
     MarketMover,
     MarketOverview,
     MostActiveStock,
+    SectorPerformance,
     StockQuote,
 )
 from app.services.market_service import MarketService
@@ -45,3 +48,18 @@ def get_stocks(
     if q:
         return service.search_stocks(q)
     return service.get_stocks()
+
+
+@router.get("/market/breadth", response_model=MarketBreadth)
+def get_market_breadth(service: MarketServiceDependency) -> MarketBreadth:
+    return service.get_market_breadth()
+
+
+@router.get("/market/sectors", response_model=list[SectorPerformance])
+def get_sector_analytics(service: MarketServiceDependency) -> list[SectorPerformance]:
+    return service.get_sector_analytics()
+
+
+@router.get("/market/heatmap", response_model=list[HeatmapItem])
+def get_market_heatmap(service: MarketServiceDependency) -> list[HeatmapItem]:
+    return service.get_market_heatmap()

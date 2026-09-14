@@ -2,10 +2,12 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Literal
 
+from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.db.models import DailyPrice, LiveQuote
+from app.db.models import DailyPrice, Instrument, LiveQuote
+from app.models.market import HeatmapItem, MarketBreadth, SectorPerformance
 
 
 @dataclass
@@ -31,6 +33,13 @@ class UpsertResult:
 
 
 class DailyPriceRepository(ABC):
+    @abstractmethod
+    def get_common_session_date(self, security_type: str = "EQUITY") -> str | None:
+        """Return the latest date represented by the requested security type."""
+
+    @abstractmethod
+    def get_prices_for_session(self, session_date: str, security_type: str = "EQUITY") -> list[DailyPrice]:
+        """Return all requested-security prices observed on one session."""
     @abstractmethod
     def upsert_many(
         self,
@@ -61,6 +70,18 @@ class DailyPriceRepository(ABC):
     @abstractmethod
     def get_intraday_by_symbol(self, symbol: str) -> list[LiveQuote]:
         """Return all intraday live quote rows for a symbol, ordered by timestamp ascending."""
+
+    @abstractmethod
+    def get_market_breadth(self, session_date: str | None = None, security_type: str = "EQUITY") -> MarketBreadth:
+        """Return advance-decline breadth metrics for the given or latest trading date."""
+
+    @abstractmethod
+    def get_sector_analytics(self, security_type: str = "EQUITY") -> list[SectorPerformance]:
+        """Return aggregate sector performance, counts, and volume metrics."""
+
+    @abstractmethod
+    def get_market_heatmap(self, security_type: str = "EQUITY") -> list[HeatmapItem]:
+        """Return latest equity observations for the market heatmap."""
 
 
 class PostgresDailyPriceRepository(DailyPriceRepository):
@@ -99,6 +120,8 @@ class PostgresDailyPriceRepository(DailyPriceRepository):
                     existing.change = row.change
                     existing.change_percent = row.change_percent
                     existing.previous_close = row.previous_close
+                    existing.is_ohlc_valid = True
+                    existing.validation_reason = None
                     result.replaced += 1
                 else:
                     result.skipped += 1
@@ -115,6 +138,7 @@ class PostgresDailyPriceRepository(DailyPriceRepository):
                     change=row.change,
                     change_percent=row.change_percent,
                     previous_close=row.previous_close,
+                    is_ohlc_valid=True,
                 )
                 self._session.add(price)
                 existing_map[key] = price
@@ -126,10 +150,23 @@ class PostgresDailyPriceRepository(DailyPriceRepository):
     def get_by_symbol(self, symbol: str) -> list[DailyPrice]:
         return (
             self._session.query(DailyPrice)
-            .filter(DailyPrice.symbol == symbol)
+            .filter(DailyPrice.symbol == symbol, DailyPrice.is_ohlc_valid.is_(True))
             .order_by(DailyPrice.date.asc())
             .all()
         )
+
+    def get_common_session_date(self, security_type: str = "EQUITY") -> str | None:
+        return self._session.execute(
+            text("""SELECT max(p.date) FROM daily_prices p
+                   JOIN instruments i ON i.symbol = p.symbol
+                   WHERE i.security_type = :st AND p.is_ohlc_valid = true"""), {"st": security_type}
+        ).scalar()
+
+    def get_prices_for_session(self, session_date: str, security_type: str = "EQUITY") -> list[DailyPrice]:
+        return (self._session.query(DailyPrice)
+                .join(DailyPrice.instrument)
+                .filter(DailyPrice.date == session_date, Instrument.security_type == security_type, DailyPrice.is_ohlc_valid.is_(True))
+                .order_by(DailyPrice.turnover.desc(), DailyPrice.symbol.asc()).all())
 
     def get_by_symbol_and_date_range(
         self, symbol: str, start_date: str, end_date: str
@@ -140,6 +177,7 @@ class PostgresDailyPriceRepository(DailyPriceRepository):
                 DailyPrice.symbol == symbol,
                 DailyPrice.date >= start_date,
                 DailyPrice.date <= end_date,
+                DailyPrice.is_ohlc_valid.is_(True),
             )
             .order_by(DailyPrice.date.asc())
             .all()
@@ -148,7 +186,7 @@ class PostgresDailyPriceRepository(DailyPriceRepository):
     def get_latest_by_symbol(self, symbol: str) -> DailyPrice | None:
         return (
             self._session.query(DailyPrice)
-            .filter(DailyPrice.symbol == symbol)
+            .filter(DailyPrice.symbol == symbol, DailyPrice.is_ohlc_valid.is_(True))
             .order_by(DailyPrice.date.desc())
             .first()
         )
@@ -160,3 +198,134 @@ class PostgresDailyPriceRepository(DailyPriceRepository):
             .order_by(LiveQuote.timestamp.asc())
             .all()
         )
+
+    def get_market_breadth(self, session_date: str | None = None, security_type: str = "EQUITY") -> MarketBreadth:
+        target_date = session_date
+        if not target_date:
+            target_date = self.get_common_session_date(security_type)
+
+        if not target_date:
+            return MarketBreadth(
+                observation_date="N/A",
+                advancing_count=0,
+                declining_count=0,
+                unchanged_count=0,
+                total_count=0,
+                advance_decline_ratio=None,
+                advancing_percent=0.0,
+                declining_percent=0.0,
+                unchanged_percent=0.0,
+            )
+
+        row = self._session.execute(
+            text("""
+                SELECT
+                    count(*) as total,
+                    sum(CASE WHEN p.change_percent > 0 THEN 1 ELSE 0 END) as advancing,
+                    sum(CASE WHEN p.change_percent < 0 THEN 1 ELSE 0 END) as declining,
+                    sum(CASE WHEN p.change_percent = 0 THEN 1 ELSE 0 END) as unchanged
+                FROM daily_prices p
+                JOIN instruments i ON p.symbol = i.symbol
+                WHERE p.date = :dt AND i.security_type = :st AND p.is_ohlc_valid = true;
+            """),
+            {"dt": target_date, "st": security_type},
+        ).fetchone()
+
+        total = int(row[0]) if row and row[0] is not None else 0
+        adv = int(row[1]) if row and row[1] is not None else 0
+        dec = int(row[2]) if row and row[2] is not None else 0
+        unc = int(row[3]) if row and row[3] is not None else 0
+
+        adv_pct = round((adv / total) * 100, 2) if total > 0 else 0.0
+        dec_pct = round((dec / total) * 100, 2) if total > 0 else 0.0
+        unc_pct = round((unc / total) * 100, 2) if total > 0 else 0.0
+        ratio = round(adv / dec, 2) if dec > 0 else None
+
+        return MarketBreadth(
+            observation_date=str(target_date),
+            advancing_count=adv,
+            declining_count=dec,
+            unchanged_count=unc,
+            total_count=total,
+            advance_decline_ratio=ratio,
+            advancing_percent=adv_pct,
+            declining_percent=dec_pct,
+            unchanged_percent=unc_pct,
+        )
+
+    def get_sector_analytics(self, security_type: str = "EQUITY") -> list[SectorPerformance]:
+        rows = self._session.execute(
+            text("""
+                WITH common_session AS (SELECT max(p.date) AS date FROM daily_prices p JOIN instruments i ON i.symbol=p.symbol WHERE i.security_type=:st AND p.is_ohlc_valid = true)
+                SELECT
+                    i.sector as sector_name,
+                    count(*) as stock_count,
+                    sum(CASE WHEN p.change_percent > 0 THEN 1 ELSE 0 END) as advancing,
+                    sum(CASE WHEN p.change_percent < 0 THEN 1 ELSE 0 END) as declining,
+                    sum(CASE WHEN p.change_percent = 0 THEN 1 ELSE 0 END) as unchanged,
+                    avg(p.change_percent) as avg_pct_change,
+                    sum(p.volume) as total_volume,
+                    sum(p.turnover) as total_turnover,
+                    max(p.date) as latest_date
+                FROM instruments i JOIN daily_prices p ON i.symbol = p.symbol
+                WHERE i.security_type = :st AND i.sector IS NOT NULL AND p.is_ohlc_valid = true AND p.date=(SELECT date FROM common_session)
+                GROUP BY i.sector
+                ORDER BY avg_pct_change DESC;
+            """),
+            {"st": security_type},
+        ).fetchall()
+
+        sectors: list[SectorPerformance] = []
+        for r in rows:
+            sectors.append(
+                SectorPerformance(
+                    sector=str(r[0]),
+                    stock_count=int(r[1]),
+                    advancing_count=int(r[2] or 0),
+                    declining_count=int(r[3] or 0),
+                    unchanged_count=int(r[4] or 0),
+                    average_change_percent=round(float(r[5] or 0.0), 2),
+                    total_volume=int(r[6] or 0),
+                    total_turnover=round(float(r[7] or 0.0), 2),
+                    observation_date=str(r[8] or "N/A"),
+                )
+            )
+        return sectors
+
+    def get_market_heatmap(self, security_type: str = "EQUITY") -> list[HeatmapItem]:
+        rows = self._session.execute(
+            text("""
+                WITH common_session AS (SELECT max(p.date) AS date FROM daily_prices p JOIN instruments i ON i.symbol=p.symbol WHERE i.security_type=:st AND p.is_ohlc_valid = true)
+                SELECT
+                    i.symbol,
+                    i.company_name,
+                    i.sector,
+                    p.close,
+                    p.change,
+                    p.change_percent,
+                    p.volume,
+                    p.turnover,
+                    p.date
+                FROM instruments i JOIN daily_prices p ON i.symbol = p.symbol
+                WHERE i.security_type = :st AND p.is_ohlc_valid = true AND p.date=(SELECT date FROM common_session)
+                ORDER BY p.turnover DESC;
+            """),
+            {"st": security_type},
+        ).fetchall()
+
+        items: list[HeatmapItem] = []
+        for r in rows:
+            items.append(
+                HeatmapItem(
+                    symbol=str(r[0]),
+                    company_name=str(r[1]),
+                    sector=str(r[2]) if r[2] else None,
+                    ltp=float(r[3]),
+                    change=float(r[4]),
+                    change_percent=float(r[5]),
+                    volume=int(r[6]),
+                    turnover=float(r[7]),
+                    observation_date=str(r[8]),
+                )
+            )
+        return items

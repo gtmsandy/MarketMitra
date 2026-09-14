@@ -3,9 +3,12 @@ import random
 from datetime import date, datetime, timedelta, timezone
 
 from app.models.market import (
+    HeatmapItem,
+    MarketBreadth,
     MarketMover,
     MarketOverview,
     MostActiveStock,
+    SectorPerformance,
     StockQuote,
 )
 from app.models.stock import IntradayPricePoint, PriceHistoryPoint, StockDetail
@@ -293,6 +296,73 @@ class MockMarketProvider(MarketDataProvider):
             return None
         # Mock provider honestly returns an empty list for intraday observations: zero fake data!
         return []
+
+    def get_market_breadth(self) -> MarketBreadth:
+        adv = sum(1 for s in self._stocks if s.change_percent > 0)
+        dec = sum(1 for s in self._stocks if s.change_percent < 0)
+        unc = sum(1 for s in self._stocks if s.change_percent == 0)
+        total = len(self._stocks)
+        ratio = round(adv / dec, 2) if dec > 0 else None
+        return MarketBreadth(
+            observation_date=str(MOCK_END_DATE),
+            advancing_count=adv,
+            declining_count=dec,
+            unchanged_count=unc,
+            total_count=total,
+            advance_decline_ratio=ratio,
+            advancing_percent=round((adv / total) * 100, 2) if total > 0 else 0.0,
+            declining_percent=round((dec / total) * 100, 2) if total > 0 else 0.0,
+            unchanged_percent=round((unc / total) * 100, 2) if total > 0 else 0.0,
+        )
+
+    def get_sector_analytics(self) -> list[SectorPerformance]:
+        sector_map: dict[str, list[StockQuote]] = {}
+        for s in self._stocks:
+            sec = "Commercial Banks" if s.symbol in ("NABIL", "NICA", "GBIME", "SCB") else "Other"
+            sector_map.setdefault(sec, []).append(s)
+
+        results = []
+        for sec, stocks in sector_map.items():
+            adv = sum(1 for s in stocks if s.change_percent > 0)
+            dec = sum(1 for s in stocks if s.change_percent < 0)
+            unc = sum(1 for s in stocks if s.change_percent == 0)
+            avg_chg = round(sum(s.change_percent for s in stocks) / len(stocks), 2)
+            results.append(
+                SectorPerformance(
+                    sector=sec,
+                    stock_count=len(stocks),
+                    advancing_count=adv,
+                    declining_count=dec,
+                    unchanged_count=unc,
+                    average_change_percent=avg_chg,
+                    total_volume=sum(s.volume for s in stocks),
+                    total_turnover=round(sum(self._turnovers.get(s.symbol, 0.0) for s in stocks), 2),
+                    observation_date=str(MOCK_END_DATE),
+                )
+            )
+        results.sort(key=lambda x: x.average_change_percent, reverse=True)
+        return results
+
+    def get_market_heatmap(self) -> list[HeatmapItem]:
+        results = []
+        for s in self._stocks:
+            sec = "Commercial Banks" if s.symbol in ("NABIL", "NICA", "GBIME", "SCB") else "Other"
+            to = self._turnovers.get(s.symbol, 1000000.0)
+            results.append(
+                HeatmapItem(
+                    symbol=s.symbol,
+                    company_name=s.company_name,
+                    sector=sec,
+                    ltp=s.ltp,
+                    change=s.change,
+                    change_percent=s.change_percent,
+                    volume=s.volume,
+                    turnover=to,
+                    observation_date=str(MOCK_END_DATE),
+                )
+            )
+        results.sort(key=lambda x: x.turnover, reverse=True)
+        return results
 
     @staticmethod
     def _to_market_mover(stock: StockQuote) -> MarketMover:

@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import DateTime, Float, ForeignKey, Index, Integer, String, UniqueConstraint
+from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Index, Integer, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -14,6 +14,9 @@ class Instrument(Base):
     symbol: Mapped[str] = mapped_column(String, primary_key=True)
     company_name: Mapped[str] = mapped_column(String, nullable=False)
     sector: Mapped[str | None] = mapped_column(String, nullable=True)
+    security_type: Mapped[str] = mapped_column(
+        String, nullable=False, default="EQUITY", server_default="EQUITY", index=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False
     )
@@ -62,6 +65,8 @@ class DailyPrice(Base):
     change: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
     change_percent: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
     previous_close: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    is_ohlc_valid: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default="true", index=True)
+    validation_reason: Mapped[str | None] = mapped_column(String, nullable=True)
 
     instrument: Mapped["Instrument"] = relationship(
         "Instrument", back_populates="daily_prices"

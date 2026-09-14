@@ -4,18 +4,19 @@ import type { MostActiveStock } from '../types/market'
 import { formatCompactNpr, formatInteger, formatNpr } from '../utils/formatters'
 
 type MostActiveTableProps = {
+  title?: string
   rows: MostActiveStock[]
   limit?: number
 }
 
-function MostActiveTable({ rows, limit = 15 }: MostActiveTableProps) {
+function MostActiveTable({ title = 'Most Active Equities', rows, limit = 15 }: MostActiveTableProps) {
   const sorted = [...rows].sort((a, b) => b.turnover - a.turnover)
   const displayRows = limit ? sorted.slice(0, limit) : sorted
 
   return (
     <section className="data-panel data-panel--wide" aria-labelledby="most-active-heading">
       <div className="data-panel__heading">
-        <h2 id="most-active-heading">Most Active</h2>
+        <h2 id="most-active-heading">{title}</h2>
         <span>{displayRows.length > 0 ? `Top ${displayRows.length} by turnover` : 'By turnover'}</span>
       </div>
       <div className="table-scroll">

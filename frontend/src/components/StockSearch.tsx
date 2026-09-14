@@ -15,8 +15,6 @@ function StockSearch() {
 
   useEffect(() => {
     if (!debouncedQuery.trim()) {
-      setResults([])
-      setIsOpen(false)
       return
     }
 

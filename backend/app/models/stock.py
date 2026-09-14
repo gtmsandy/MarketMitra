@@ -38,3 +38,5 @@ class StockDetail(BaseModel):
     last_updated: datetime
     fifty_two_week_high: float
     fifty_two_week_low: float
+    stock_observation_date: str | None = None
+    market_snapshot_date: datetime | None = None

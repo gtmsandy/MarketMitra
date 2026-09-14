@@ -115,3 +115,81 @@ class TestMostActive:
         data = client.get("/api/v1/market/most-active").json()
         turnovers = [item["turnover"] for item in data]
         assert turnovers == sorted(turnovers, reverse=True)
+
+
+class TestMarketBreadth:
+    """GET /api/v1/market/breadth — market advance/decline metrics."""
+
+    def test_breadth_returns_200(self, client: TestClient) -> None:
+        resp = client.get("/api/v1/market/breadth")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "observation_date" in data
+        assert "advancing_count" in data
+        assert "declining_count" in data
+        assert "unchanged_count" in data
+        assert "total_count" in data
+        assert "advance_decline_ratio" in data
+
+    def test_breadth_counts_sum_to_total(self, client: TestClient) -> None:
+        data = client.get("/api/v1/market/breadth").json()
+        total = data["total_count"]
+        assert data["advancing_count"] + data["declining_count"] + data["unchanged_count"] == total
+
+    def test_breadth_percentages_sum_to_100(self, client: TestClient) -> None:
+        data = client.get("/api/v1/market/breadth").json()
+        pct_sum = round(data["advancing_percent"] + data["declining_percent"] + data["unchanged_percent"], 1)
+        assert pct_sum in (99.9, 100.0, 100.1)
+
+
+class TestSectorAnalytics:
+    """GET /api/v1/market/sectors — sector aggregate performance."""
+
+    def test_sectors_returns_200(self, client: TestClient) -> None:
+        resp = client.get("/api/v1/market/sectors")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert isinstance(data, list)
+        assert len(data) > 0
+
+    def test_sector_fields_and_methodology(self, client: TestClient) -> None:
+        data = client.get("/api/v1/market/sectors").json()
+        for item in data:
+            assert "sector" in item
+            assert item["stock_count"] > 0
+            assert item["advancing_count"] + item["declining_count"] + item["unchanged_count"] == item["stock_count"]
+            assert "average_change_percent" in item
+            assert item["methodology"] == "equal_weighted_constituent_daily_percentage_change"
+
+    def test_sectors_sorted_descending(self, client: TestClient) -> None:
+        data = client.get("/api/v1/market/sectors").json()
+        avg_changes = [item["average_change_percent"] for item in data]
+        assert avg_changes == sorted(avg_changes, reverse=True)
+
+
+class TestMarketHeatmap:
+    """GET /api/v1/market/heatmap — market heatmap equity items."""
+
+    def test_heatmap_returns_200(self, client: TestClient) -> None:
+        resp = client.get("/api/v1/market/heatmap")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert isinstance(data, list)
+        assert len(data) > 0
+
+    def test_heatmap_item_shape(self, client: TestClient) -> None:
+        data = client.get("/api/v1/market/heatmap").json()
+        first = data[0]
+        assert "symbol" in first
+        assert "company_name" in first
+        assert "ltp" in first
+        assert "change_percent" in first
+        assert "volume" in first
+        assert "turnover" in first
+        assert "observation_date" in first
+        assert first["weight_metric"] == "turnover"
+
+    def test_heatmap_sorted_by_turnover_descending(self, client: TestClient) -> None:
+        data = client.get("/api/v1/market/heatmap").json()
+        turnovers = [item["turnover"] for item in data]
+        assert turnovers == sorted(turnovers, reverse=True)

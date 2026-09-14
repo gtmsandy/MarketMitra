@@ -1,7 +1,10 @@
 from app.models.market import (
+    HeatmapItem,
+    MarketBreadth,
     MarketMover,
     MarketOverview,
     MostActiveStock,
+    SectorPerformance,
     StockQuote,
 )
 from app.models.stock import IntradayPricePoint, PriceHistoryPoint, StockDetail
@@ -38,4 +41,13 @@ class MarketService:
 
     def get_stock_intraday(self, symbol: str) -> list[IntradayPricePoint] | None:
         return self._provider.get_stock_intraday(symbol)
+
+    def get_market_breadth(self) -> MarketBreadth:
+        return self._provider.get_market_breadth()
+
+    def get_sector_analytics(self) -> list[SectorPerformance]:
+        return self._provider.get_sector_analytics()
+
+    def get_market_heatmap(self) -> list[HeatmapItem]:
+        return self._provider.get_market_heatmap()
 

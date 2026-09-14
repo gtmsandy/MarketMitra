@@ -25,17 +25,17 @@ class HealthResponse(BaseModel):
     service: Literal["marketmitra-api"]
     market_data_source: str
     database_status: Literal["connected", "disconnected", "not_configured"]
-    market_status: Literal["OPEN", "CLOSED"]
-    data_freshness: Literal["FRESH", "STALE", "UNKNOWN"]
+    market_status: Literal["OPEN", "CLOSED", "HALTED", "DATA_UNAVAILABLE", "STALE"]
+    data_freshness: Literal["FRESH", "STALE", "UNKNOWN", "LIVE", "DELAYED", "HISTORICAL", "DATA_UNAVAILABLE"]
+    market_snapshot_date: datetime | None = None
     last_ingestion: IngestionSummary | None = None
+    market_snapshot_date = None
 
 
 @router.get("/health", response_model=HealthResponse)
 def get_health() -> HealthResponse:
     source = get_market_data_source()
-    market_status: Literal["OPEN", "CLOSED"] = (
-        "OPEN" if get_market_status() == "OPEN" else "CLOSED"
-    )
+    market_status = get_market_status()
 
     if source == "mock":
         from app.providers.mock_market import MockMarketProvider
@@ -53,6 +53,7 @@ def get_health() -> HealthResponse:
             database_status="not_configured",
             market_status=market_status,
             data_freshness=freshness,
+            market_snapshot_date=overview.last_updated,
             last_ingestion=None,
         )
 
@@ -61,6 +62,7 @@ def get_health() -> HealthResponse:
     status: Literal["ok", "degraded"]
     data_freshness: Literal["FRESH", "STALE", "UNKNOWN"] = "UNKNOWN"
     last_ingestion: IngestionSummary | None = None
+    market_snapshot_date = None
 
     try:
         from app.db.base import make_session_factory
@@ -79,6 +81,7 @@ def get_health() -> HealthResponse:
             latest_captured_at = (
                 latest_snapshot.captured_at if latest_snapshot is not None else None
             )
+            market_snapshot_date = latest_captured_at
             data_freshness = calculate_data_freshness(latest_captured_at)  # type: ignore[assignment]
 
             runs_repo = PostgresIngestionRunRepository(session)
@@ -105,4 +108,5 @@ def get_health() -> HealthResponse:
         market_status=market_status,
         data_freshness=data_freshness,
         last_ingestion=last_ingestion,
+        market_snapshot_date=market_snapshot_date,
     )
