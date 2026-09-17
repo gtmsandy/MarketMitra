@@ -36,11 +36,17 @@ class RestPollingLiveProvider(LiveMarketDataProvider):
         self,
         api_url: str | None = None,
         api_key: str | None = None,
+        api_secret: str | None = None,
+        access_id: str | None = None,
+        api_version: str | None = None,
         provider_name: str | None = None,
         timeout_seconds: float = 5.0,
     ) -> None:
         self._api_url = api_url or os.environ.get("NEPSE_LIVE_API_URL")
         self._api_key = api_key or os.environ.get("NEPSE_LIVE_API_KEY")
+        self._api_secret = api_secret or os.environ.get("NEPSE_LIVE_API_SECRET")
+        self._access_id = access_id or os.environ.get("NEPSE_LIVE_ACCESS_ID")
+        self._api_version = api_version or os.environ.get("NEPSE_LIVE_API_VERSION", "1.0")
         self._provider_name = (
             provider_name or os.environ.get("NEPSE_PROVIDER_NAME") or "unconfigured"
         )
@@ -48,13 +54,21 @@ class RestPollingLiveProvider(LiveMarketDataProvider):
         self._consecutive_failures = 0
         self._max_consecutive_failures = 3
         self._last_successful_poll: datetime | None = None
+        self._circuit_opened_at: datetime | None = None
+        self._recovery_backoff_seconds = 30.0
 
     def is_live_accessible(self) -> bool:
         """True only if an API URL is configured and circuit breaker has not tripped."""
         if not self._api_url:
             return False
         if self._consecutive_failures >= self._max_consecutive_failures:
-            return False
+            if self._circuit_opened_at is None:
+                return False
+            age = (datetime.now(tz=timezone.utc) - self._circuit_opened_at).total_seconds()
+            if age < self._recovery_backoff_seconds:
+                return False
+            # Half-open: permit one recovery probe.
+            return True
         return True
 
     def get_provider_name(self) -> str:
@@ -101,7 +115,7 @@ class RestPollingLiveProvider(LiveMarketDataProvider):
         # When real credentials are provided in deployment, this performs an authenticated GET
         try:
             import httpx
-            headers = {"Authorization": f"Bearer {self._api_key}"} if self._api_key else {}
+            headers = self._request_headers()
             response = httpx.get(
                 f"{self._api_url}/market/snapshot",
                 headers=headers,
@@ -110,6 +124,7 @@ class RestPollingLiveProvider(LiveMarketDataProvider):
             if response.status_code == 200:
                 data = response.json()
                 self._consecutive_failures = 0
+                self._circuit_opened_at = None
                 self._last_successful_poll = datetime.now(tz=timezone.utc)
                 return LiveSnapshotObservation(
                     nepse_index=float(data["nepse_index"]),
@@ -138,7 +153,7 @@ class RestPollingLiveProvider(LiveMarketDataProvider):
 
         try:
             import httpx
-            headers = {"Authorization": f"Bearer {self._api_key}"} if self._api_key else {}
+            headers = self._request_headers()
             response = httpx.get(
                 f"{self._api_url}/stocks/quotes",
                 headers=headers,
@@ -146,6 +161,7 @@ class RestPollingLiveProvider(LiveMarketDataProvider):
             )
             if response.status_code == 200:
                 self._consecutive_failures = 0
+                self._circuit_opened_at = None
                 self._last_successful_poll = datetime.now(tz=timezone.utc)
                 quotes = []
                 for item in response.json():
@@ -181,7 +197,7 @@ class RestPollingLiveProvider(LiveMarketDataProvider):
 
         try:
             import httpx
-            headers = {"Authorization": f"Bearer {self._api_key}"} if self._api_key else {}
+            headers = self._request_headers()
             response = httpx.get(
                 f"{self._api_url}/stocks/{symbol}/intraday",
                 headers=headers,
@@ -211,4 +227,16 @@ class RestPollingLiveProvider(LiveMarketDataProvider):
     def _record_failure(self) -> None:
         self._consecutive_failures += 1
         if self._consecutive_failures >= self._max_consecutive_failures:
+            self._circuit_opened_at = datetime.now(tz=timezone.utc)
             logger.error("Live provider %s circuit breaker tripped (3 failures)", self._provider_name)
+
+    def _request_headers(self) -> dict[str, str]:
+        if self._api_secret or self._access_id:
+            return {
+                "ApiKey": self._api_key or "",
+                "ApiSecret": self._api_secret or "",
+                "AccessId": self._access_id or "",
+                "ApiVersion": self._api_version,
+                "Content-Type": "application/json",
+            }
+        return {"Authorization": f"Bearer {self._api_key}"} if self._api_key else {}

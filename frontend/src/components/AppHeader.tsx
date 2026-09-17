@@ -3,12 +3,14 @@ import { Link, NavLink } from 'react-router-dom'
 import type { MarketOverview } from '../types/market'
 import { formatObservationDate } from '../utils/formatters'
 import StockSearch from './StockSearch'
+import { useLiveMarket } from '../live/useLiveMarket'
 
 type AppHeaderProps = {
   overview: MarketOverview | null
 }
 
 function AppHeader({ overview }: AppHeaderProps) {
+  const live = useLiveMarket()
   const rawStatus = overview?.market_status.toUpperCase() || 'CLOSED'
   let statusClass = 'closed'
   if (rawStatus === 'OPEN') statusClass = 'open'
@@ -16,7 +18,7 @@ function AppHeader({ overview }: AppHeaderProps) {
   else if (rawStatus === 'DATA_UNAVAILABLE') statusClass = 'unavailable'
   else if (rawStatus === 'STALE') statusClass = 'stale'
 
-  const dataBadge = overview?.data_freshness?.replace('_', ' ') ?? (rawStatus === 'OPEN' ? 'LIVE' : 'HISTORICAL')
+  const dataBadge = live.state?.provider === 'DEVELOPMENT_REPLAY' ? 'DEVELOPMENT REPLAY' : (overview?.data_freshness?.replace('_', ' ') ?? (rawStatus === 'OPEN' ? 'LIVE' : 'HISTORICAL'))
   const badgeClass = dataBadge === 'LIVE' ? 'market-badge--live' : 'market-badge--historical'
   return (
     <header className="app-header">

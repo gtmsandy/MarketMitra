@@ -12,10 +12,12 @@ import {
   formatSignedNumber,
   getChangeTone,
 } from '../utils/formatters'
+import { useLiveMarket } from '../live/useLiveMarket'
 
 type Timeframe = '1D' | '1W' | '1M' | '1Y' | 'ALL'
 
 function StockDetailPage() {
+  const live = useLiveMarket()
   const { symbol } = useParams<{ symbol: string }>()
   const [detail, setDetail] = useState<StockDetail | null>(null)
   const [history, setHistory] = useState<PriceHistoryPoint[]>([])
@@ -124,7 +126,9 @@ function StockDetailPage() {
     )
   }
 
-  const tone = getChangeTone(detail.change)
+  const liveQuote = symbol ? live.state?.quotes[symbol.toUpperCase()] : undefined
+  const current = liveQuote ? { ...detail, ltp: liveQuote.ltp ?? detail.ltp, change_percent: liveQuote.change_percent ?? detail.change_percent, open: liveQuote.open ?? detail.open, high: liveQuote.high ?? detail.high, low: liveQuote.low ?? detail.low, volume: liveQuote.volume ?? detail.volume, last_updated: liveQuote.provider_timestamp ?? detail.last_updated } : detail
+  const tone = getChangeTone(current.change)
 
   return (
     <main className="stock-detail-page">
@@ -133,13 +137,13 @@ function StockDetailPage() {
 
         <header className="stock-detail-header">
           <div>
-            <h1 className="stock-detail-header__symbol">{detail.symbol}</h1>
-            <p className="stock-detail-header__name">{detail.company_name}</p>
+            <h1 className="stock-detail-header__symbol">{current.symbol}</h1>
+            <p className="stock-detail-header__name">{current.company_name}</p>
           </div>
           <div className="stock-detail-header__price">
-            <span className="stock-detail-header__ltp">{formatNpr(detail.ltp)}</span>
+              <span className="stock-detail-header__ltp">{formatNpr(current.ltp)}</span>
             <span className={`change change--${tone}`}>
-              {formatSignedNumber(detail.change)} ({formatPercentage(detail.change_percent)})
+              {formatSignedNumber(current.change)} ({formatPercentage(current.change_percent)})
             </span>
           </div>
         </header>
@@ -148,15 +152,15 @@ function StockDetailPage() {
           <dl className="stock-detail-dl">
             <div className="stock-detail-dl__item">
               <dt>Open</dt>
-              <dd>{formatNpr(detail.open)}</dd>
+              <dd>{formatNpr(current.open)}</dd>
             </div>
             <div className="stock-detail-dl__item">
               <dt>High</dt>
-              <dd>{formatNpr(detail.high)}</dd>
+              <dd>{formatNpr(current.high)}</dd>
             </div>
             <div className="stock-detail-dl__item">
               <dt>Low</dt>
-              <dd>{formatNpr(detail.low)}</dd>
+              <dd>{formatNpr(current.low)}</dd>
             </div>
             <div className="stock-detail-dl__item">
               <dt>Prev. Close</dt>
@@ -164,7 +168,7 @@ function StockDetailPage() {
             </div>
             <div className="stock-detail-dl__item">
               <dt>Volume</dt>
-              <dd>{formatInteger(detail.volume)}</dd>
+              <dd>{formatInteger(current.volume)}</dd>
             </div>
             <div className="stock-detail-dl__item">
               <dt>52W High</dt>
@@ -218,7 +222,7 @@ function StockDetailPage() {
         </section>
 
         <p className="stock-detail-footer">
-          Last Observation {formatObservationDate(detail.last_updated)} · Database records
+          {liveQuote ? `${live.state?.provider ?? 'LIVE'} · Provider observation ` : 'Last Observation '}{formatObservationDate(current.last_updated)} · {liveQuote ? 'Current quote' : 'Database records'}
         </p>
       </div>
     </main>

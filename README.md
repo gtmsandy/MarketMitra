@@ -57,6 +57,23 @@ DATABASE_URL=postgresql://<user>:<password>@localhost:5432/<database>
 
 Use `MARKET_DATA_SOURCE=mock` when developing without PostgreSQL.
 
+Optional live synchronization is disabled by default. Enable it only with an authorized provider and its documented endpoint/credentials:
+
+```env
+LIVE_MARKET_ENABLED=false
+NEPSE_PROVIDER_NAME=unconfigured
+NEPSE_LIVE_API_URL=
+NEPSE_LIVE_API_KEY=
+NEPSE_LIVE_API_SECRET=
+NEPSE_LIVE_ACCESS_ID=
+NEPSE_LIVE_API_VERSION=1.0
+LIVE_MARKET_POLL_INTERVAL_SECONDS=1
+```
+
+When no live provider is configured, MarketMitra stays explicitly historical or stale rather than presenting historical records as live data.
+
+For local pipeline testing only, use `LIVE_MARKET_ENABLED=true` and `LIVE_MARKET_PROVIDER=replay`. This deterministic `DEVELOPMENT_REPLAY` feed never represents genuine NEPSE data. Authorized providers are delivered through the same canonical state pipeline and WebSocket endpoint (`/api/v1/ws/market`).
+
 ## Running the backend
 
 ```bash

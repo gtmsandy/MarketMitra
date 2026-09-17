@@ -25,6 +25,7 @@ import {
   formatSignedNumber,
   getChangeTone,
 } from '../utils/formatters'
+import { useLiveMarket } from '../live/useLiveMarket'
 
 type DashboardData = {
   overview: MarketOverview
@@ -34,6 +35,7 @@ type DashboardData = {
 }
 
 function DashboardPage() {
+  const live = useLiveMarket()
   const [dashboardData, setDashboardData] = useState<DashboardData | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [hasError, setHasError] = useState(false)
@@ -105,6 +107,8 @@ function DashboardPage() {
   }
 
   const { overview, gainers, losers, breadth } = dashboardData
+  const liveIndex = live.state?.index ?? overview.nepse_index
+  const liveBreadth = live.state && Object.keys(live.state.quotes).length ? (() => { const qs=Object.values(live.state!.quotes); const a=qs.filter(q=>(q.change_percent??0)>0).length; const d=qs.filter(q=>(q.change_percent??0)<0).length; const u=qs.length-a-d; const t=qs.length; return {observation_date:'CURRENT', advancing_count:a, declining_count:d, unchanged_count:u, total_count:t, advance_decline_ratio:d?a/d:null, advancing_percent:t?a*100/t:0, declining_percent:t?d*100/t:0, unchanged_percent:t?u*100/t:0} })() : breadth
   const indexChange = `${formatSignedNumber(overview.index_change)} (${formatPercentage(overview.index_change_percent)})`
 
   return (
@@ -120,7 +124,7 @@ function DashboardPage() {
         <div className="metric-grid">
           <MarketMetricCard
             label="NEPSE Index"
-            value={formatNumber(overview.nepse_index, 2)}
+            value={formatNumber(liveIndex, 2)}
             change={indexChange}
             detail="Index movement"
             tone={getChangeTone(overview.index_change)}
@@ -144,7 +148,7 @@ function DashboardPage() {
       </section>
 
       <div className="dashboard-analytics-grid">
-        <MarketBreadthCard breadth={breadth} />
+        <MarketBreadthCard breadth={liveBreadth} />
       </div>
 
       <section className="market-tables" aria-label="Market activity">

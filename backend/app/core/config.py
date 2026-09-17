@@ -9,7 +9,7 @@ _VALID_SOURCES = ("mock", "postgres")
 
 
 def get_cors_origins() -> list[str]:
-    raw = os.getenv("CORS_ORIGINS", "http://localhost:5173")
+    raw = os.getenv("CORS_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173,http://127.0.0.1:5176")
     return [origin.strip() for origin in raw.split(",") if origin.strip()]
 
 
@@ -42,3 +42,18 @@ def get_database_url() -> str:
             "Set DATABASE_URL in your environment or .env file."
         )
     return url
+
+
+def is_live_market_enabled() -> bool:
+    return os.getenv("LIVE_MARKET_ENABLED", "false").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def get_live_market_poll_interval() -> float:
+    raw = os.getenv("LIVE_MARKET_POLL_INTERVAL_SECONDS", "1")
+    try:
+        return max(1.0, float(raw))
+    except ValueError:
+        return 1.0
+
+def replay_persistence_enabled() -> bool:
+    return os.getenv("REPLAY_PERSIST_LIVE_QUOTES", "false").strip().lower() in {"1", "true", "yes", "on"}

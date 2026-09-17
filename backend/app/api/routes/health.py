@@ -1,4 +1,5 @@
 from datetime import datetime
+import os
 from typing import Literal
 
 from fastapi import APIRouter
@@ -29,12 +30,21 @@ class HealthResponse(BaseModel):
     data_freshness: Literal["FRESH", "STALE", "UNKNOWN", "LIVE", "DELAYED", "HISTORICAL", "DATA_UNAVAILABLE"]
     market_snapshot_date: datetime | None = None
     last_ingestion: IngestionSummary | None = None
+    provider: str = "unconfigured"
+    enabled: bool = False
+    configured: bool = False
+    connection_status: str = "DISCONNECTED"
+    failure_count: int = 0
+    circuit_state: str = "CLOSED"
     market_snapshot_date = None
 
 
 @router.get("/health", response_model=HealthResponse)
 def get_health() -> HealthResponse:
     source = get_market_data_source()
+    live_enabled = os.getenv("LIVE_MARKET_ENABLED", "false").lower() in {"1", "true", "yes"}
+    provider_name = os.getenv("LIVE_MARKET_PROVIDER", "unconfigured")
+    configured = bool(os.getenv("NEPSE_LIVE_API_URL")) or provider_name.lower() == "replay"
     market_status = get_market_status()
 
     if source == "mock":
@@ -55,6 +65,8 @@ def get_health() -> HealthResponse:
             data_freshness=freshness,
             market_snapshot_date=overview.last_updated,
             last_ingestion=None,
+            provider=provider_name, enabled=live_enabled, configured=configured,
+            connection_status="CONNECTED" if configured and live_enabled else "DISCONNECTED",
         )
 
     # MARKET_DATA_SOURCE is postgres: guarded connection check
@@ -109,4 +121,6 @@ def get_health() -> HealthResponse:
         data_freshness=data_freshness,
         last_ingestion=last_ingestion,
         market_snapshot_date=market_snapshot_date,
+        provider=provider_name, enabled=live_enabled, configured=configured,
+        connection_status="CONNECTED" if configured and live_enabled else "DISCONNECTED",
     )

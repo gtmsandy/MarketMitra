@@ -12,6 +12,7 @@ from app.models.market import (
 )
 from app.models.stock import IntradayPricePoint, PriceHistoryPoint, StockDetail
 from app.providers.base import MarketDataProvider
+from app.core.config import is_live_market_enabled
 from app.repositories.instrument_repository import PostgresInstrumentRepository
 from app.repositories.market_repository import PostgresMarketSnapshotRepository
 from app.repositories.price_repository import PostgresDailyPriceRepository
@@ -182,6 +183,8 @@ class PostgresMarketProvider(MarketDataProvider):
         if instrument is None:
             return None
         quotes = self._prices.get_intraday_by_symbol(symbol.upper())
+        if not is_live_market_enabled():
+            quotes = [q for q in quotes if q.provider != "DEVELOPMENT_REPLAY"]
         return [
             IntradayPricePoint(
                 timestamp=q.timestamp,

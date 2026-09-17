@@ -25,6 +25,8 @@ from app.core.market_schedule import is_market_open
 from app.db.models import Instrument, LiveQuote
 from app.ingestion.live_validator import validate_live_stock_quote
 from app.providers.live_base import LiveMarketDataProvider, LiveQuoteObservation
+from app.services.live_state import CanonicalQuote, live_state_store
+from app.core.config import replay_persistence_enabled
 
 logger = logging.getLogger(__name__)
 
@@ -93,7 +95,7 @@ class LivePollingWorker:
     async def _run_loop(self) -> None:
         while self._is_running:
             try:
-                self.poll_cycle()
+                await asyncio.to_thread(self.poll_cycle)
             except Exception as exc:
                 logger.error("Unexpected error in live polling cycle: %s", exc, exc_info=True)
             try:
@@ -109,7 +111,7 @@ class LivePollingWorker:
         now = datetime.now(tz=timezone.utc)
 
         # 1. Market schedule check
-        if not override_market_open and not is_market_open():
+        if not override_market_open and self._provider.get_provider_name() != "DEVELOPMENT_REPLAY" and not is_market_open():
             report = PollingCycleReport(
                 timestamp=now,
                 status="skipped_market_closed",
@@ -128,6 +130,13 @@ class LivePollingWorker:
 
         # 3. Fetch quotes from provider
         try:
+            snapshot = self._provider.fetch_live_snapshot()
+            if snapshot:
+                live_state_store.update_market(provider=snapshot.provider, provider_timestamp=snapshot.source_timestamp,
+                    market_status=snapshot.market_status.value, data_freshness=self._provider.get_data_freshness_mode().value,
+                    index=snapshot.nepse_index, index_change=snapshot.index_change,
+                    index_change_percent=snapshot.index_change_percent, turnover=snapshot.turnover,
+                    volume=snapshot.total_volume, transactions=snapshot.total_transactions)
             raw_quotes: list[LiveQuoteObservation] = self._provider.fetch_live_quotes()
         except Exception as exc:
             report = PollingCycleReport(
@@ -145,6 +154,20 @@ class LivePollingWorker:
         )
 
         if not raw_quotes:
+            self._last_report = report
+            return report
+
+        if self._provider.get_provider_name() == "DEVELOPMENT_REPLAY" and not replay_persistence_enabled():
+            for q in raw_quotes:
+                previous_close = q.ltp - q.change if q.ltp - q.change > 0 else q.open
+                validation = validate_live_stock_quote(symbol=q.symbol, ltp=q.ltp, previous_close=previous_close, is_pre_open=False)
+                if not validation.is_valid:
+                    report.quotes_rejected += 1
+                    continue
+                live_state_store.update_quote(CanonicalQuote(symbol=q.symbol, ltp=q.ltp, open=q.open, high=q.high,
+                    low=q.low, change=q.change, change_percent=q.change_percent, volume=q.volume,
+                    turnover=q.turnover, provider_timestamp=q.source_timestamp, ingested_at=now))
+                report.quotes_accepted += 1
             self._last_report = report
             return report
 
@@ -180,6 +203,9 @@ class LivePollingWorker:
             to_insert: list[LiveQuote] = []
 
             for q in raw_quotes:
+                live_state_store.update_quote(CanonicalQuote(symbol=q.symbol, ltp=q.ltp, open=q.open, high=q.high,
+                    low=q.low, change=q.change, change_percent=q.change_percent, volume=q.volume,
+                    turnover=q.turnover, provider_timestamp=q.source_timestamp, ingested_at=now))
                 if q.symbol not in existing_instruments:
                     # Skip unknown securities to maintain strict relational integrity
                     continue
@@ -205,6 +231,7 @@ class LivePollingWorker:
                     report.quotes_rejected += 1
                     report.rejections.append(f"{q.symbol}: [{val_result.rule_name}] {val_result.message}")
                     continue
+
 
                 # Valid quote: stage for persistence
                 to_insert.append(
