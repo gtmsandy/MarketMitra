@@ -203,16 +203,8 @@ class LivePollingWorker:
             to_insert: list[LiveQuote] = []
 
             for q in raw_quotes:
-                live_state_store.update_quote(CanonicalQuote(symbol=q.symbol, ltp=q.ltp, open=q.open, high=q.high,
-                    low=q.low, change=q.change, change_percent=q.change_percent, volume=q.volume,
-                    turnover=q.turnover, provider_timestamp=q.source_timestamp, ingested_at=now))
                 if q.symbol not in existing_instruments:
                     # Skip unknown securities to maintain strict relational integrity
-                    continue
-
-                dedup_key = (q.symbol, _norm_dt(q.captured_at))
-                if dedup_key in existing_quotes:
-                    report.quotes_duplicate += 1
                     continue
 
                 # Calculate previous close base for regulatory limit evaluation
@@ -232,6 +224,17 @@ class LivePollingWorker:
                     report.rejections.append(f"{q.symbol}: [{val_result.rule_name}] {val_result.message}")
                     continue
 
+                # Only known, valid quotes may enter the shared live state.
+                live_state_store.update_quote(CanonicalQuote(symbol=q.symbol, ltp=q.ltp, open=q.open, high=q.high,
+                    low=q.low, change=q.change, change_percent=q.change_percent, volume=q.volume,
+                    turnover=q.turnover, provider_timestamp=q.source_timestamp, ingested_at=now))
+
+                # Keep valid duplicate-timestamp updates in shared state while
+                # preserving the existing database uniqueness contract.
+                dedup_key = (q.symbol, _norm_dt(q.captured_at))
+                if dedup_key in existing_quotes:
+                    report.quotes_duplicate += 1
+                    continue
 
                 # Valid quote: stage for persistence
                 to_insert.append(
