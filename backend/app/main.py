@@ -4,7 +4,6 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.router import api_router
-from app.api.routes.websocket import router as websocket_router
 from app.core.config import get_cors_origins
 from app.core.config import get_database_url, get_live_market_poll_interval, is_live_market_enabled
 
@@ -41,4 +40,3 @@ app.add_middleware(
 )
 
 app.include_router(api_router, prefix="/api/v1")
-app.include_router(websocket_router, prefix="/api/v1")
