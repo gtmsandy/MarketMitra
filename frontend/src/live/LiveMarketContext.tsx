@@ -2,7 +2,6 @@ import {
   createContext,
   useEffect,
   useMemo,
-  useRef,
   useState,
   type ReactNode,
 } from 'react'
@@ -47,40 +46,116 @@ const LiveContext = createContext<LiveContextValue>({
 })
 
 const HEALTH_RETRY_DELAYS_MS = [250, 1000] as const
+const RECONNECT_DELAYS_MS = [500, 1000, 2000, 4000] as const
+
+// These close codes describe transient conditions where another attempt can help.
+// Protocol, payload, policy, extension, normal, and unknown failures are terminal.
+const RETRYABLE_CLOSE_CODES = new Set([1001, 1006, 1011, 1012, 1013, 1014])
 
 export function LiveMarketProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<LiveState | null>(null)
   const [connection, setConnection] =
     useState<LiveConnectionState>('DISCONNECTED')
-  const retry = useRef(500)
-  const socket = useRef<WebSocket | null>(null)
-  const stopped = useRef(false)
 
   useEffect(() => {
-    stopped.current = false
-    let cancelled = false
+    let disposed = false
+    let liveMode = false
+    let activeSocket: WebSocket | null = null
     let healthTimer: number | undefined
     let reconnectTimer: number | undefined
+    let retryAttempt = 0
+    let resumeWhenOnline = false
 
-    const connect = () => {
-      if (cancelled || stopped.current) {
+    const clearReconnectTimer = () => {
+      if (reconnectTimer !== undefined) {
+        window.clearTimeout(reconnectTimer)
+        reconnectTimer = undefined
+      }
+    }
+
+    const isCurrentSocket = (websocket: WebSocket) =>
+      !disposed && activeSocket === websocket
+
+    const detachSocket = (websocket: WebSocket) => {
+      websocket.onopen = null
+      websocket.onmessage = null
+      websocket.onclose = null
+      websocket.onerror = null
+      if (activeSocket === websocket) {
+        activeSocket = null
+      }
+    }
+
+    const closeActiveSocket = () => {
+      const websocket = activeSocket
+      if (websocket === null) {
         return
       }
 
-      setConnection(retry.current === 500 ? 'CONNECTING' : 'RECONNECTING')
+      detachSocket(websocket)
+      websocket.close()
+    }
+
+    const scheduleReconnect = (connect: () => void) => {
+      if (
+        disposed ||
+        activeSocket !== null ||
+        reconnectTimer !== undefined ||
+        !navigator.onLine
+      ) {
+        return
+      }
+
+      const delay = RECONNECT_DELAYS_MS[retryAttempt]
+      if (delay === undefined) {
+        setConnection('DISCONNECTED')
+        return
+      }
+
+      retryAttempt += 1
+      setConnection('RECONNECTING')
+      reconnectTimer = window.setTimeout(() => {
+        reconnectTimer = undefined
+        connect()
+      }, delay)
+    }
+
+    const connect = () => {
+      if (disposed || !liveMode || activeSocket !== null) {
+        return
+      }
+      if (!navigator.onLine) {
+        resumeWhenOnline = true
+        setConnection('DISCONNECTED')
+        return
+      }
+
+      clearReconnectTimer()
+      setConnection(retryAttempt === 0 ? 'CONNECTING' : 'RECONNECTING')
+
       const parsedApiUrl = new URL(apiBaseUrl)
       const websocketProtocol =
         parsedApiUrl.protocol === 'https:' ? 'wss:' : 'ws:'
       const websocket = new WebSocket(
         `${websocketProtocol}//${parsedApiUrl.host}/api/v1/ws/market`,
       )
-      socket.current = websocket
+      activeSocket = websocket
 
       websocket.onopen = () => {
+        if (!isCurrentSocket(websocket)) {
+          return
+        }
+
+        retryAttempt = 0
+        resumeWhenOnline = false
         setConnection('CONNECTED')
-        retry.current = 500
       }
+
       websocket.onmessage = (event) => {
+        if (!isCurrentSocket(websocket)) {
+          return
+        }
+
         try {
           const message = JSON.parse(event.data)
           if (message.type === 'snapshot') {
@@ -99,35 +174,85 @@ export function LiveMarketProvider({ children }: { children: ReactNode }) {
                 : previous,
             )
           }
+          // Heartbeats intentionally require no state update.
         } catch {
           // Ignore malformed provider messages and retain the last valid state.
         }
       }
-      websocket.onclose = () => {
-        if (!stopped.current) {
-          setConnection('RECONNECTING')
-          reconnectTimer = window.setTimeout(connect, retry.current)
-          retry.current = Math.min(retry.current * 2, 10000)
+
+      websocket.onclose = (event) => {
+        if (!isCurrentSocket(websocket)) {
+          return
         }
+
+        detachSocket(websocket)
+        setState(null)
+
+        if (!RETRYABLE_CLOSE_CODES.has(event.code)) {
+          resumeWhenOnline = false
+          setConnection('DISCONNECTED')
+          return
+        }
+
+        if (!navigator.onLine) {
+          resumeWhenOnline = true
+          setConnection('DISCONNECTED')
+          return
+        }
+
+        scheduleReconnect(connect)
       }
-      websocket.onerror = () => websocket.close()
+
+      websocket.onerror = () => {
+        // The browser follows a WebSocket error with a close event. The close
+        // code is the single source of truth for the retry decision.
+      }
+    }
+
+    const handleOffline = () => {
+      if (disposed || !liveMode) {
+        return
+      }
+
+      resumeWhenOnline = true
+      clearReconnectTimer()
+      closeActiveSocket()
+      setState(null)
+      setConnection('DISCONNECTED')
+    }
+
+    const handleOnline = () => {
+      if (
+        disposed ||
+        !liveMode ||
+        !resumeWhenOnline ||
+        activeSocket !== null ||
+        reconnectTimer !== undefined
+      ) {
+        return
+      }
+
+      resumeWhenOnline = false
+      retryAttempt = 0
+      connect()
     }
 
     const checkLiveAvailability = async (attempt: number) => {
       try {
         const health = await getHealth()
-        if (cancelled) {
+        if (disposed) {
           return
         }
 
         if (health.enabled && health.configured) {
+          liveMode = true
           connect()
           return
         }
 
         setConnection('DISCONNECTED')
       } catch {
-        if (cancelled) {
+        if (disposed) {
           return
         }
 
@@ -144,19 +269,19 @@ export function LiveMarketProvider({ children }: { children: ReactNode }) {
       }
     }
 
+    window.addEventListener('offline', handleOffline)
+    window.addEventListener('online', handleOnline)
     void checkLiveAvailability(0)
 
     return () => {
-      cancelled = true
-      stopped.current = true
+      disposed = true
+      window.removeEventListener('offline', handleOffline)
+      window.removeEventListener('online', handleOnline)
       if (healthTimer !== undefined) {
         window.clearTimeout(healthTimer)
       }
-      if (reconnectTimer !== undefined) {
-        window.clearTimeout(reconnectTimer)
-      }
-      socket.current?.close()
-      setConnection('DISCONNECTED')
+      clearReconnectTimer()
+      closeActiveSocket()
     }
   }, [])
 
