@@ -1,0 +1,28 @@
+{
+  "manifest_version": 1,
+  "datasets": [
+    {
+      "dataset_identifier": "marketmitra-synthetic-demo-v1",
+      "classification": "synthetic_demo",
+      "source": "MarketMitra project-generated synthetic fixture",
+      "publisher": "MarketMitra project",
+      "source_reference": "provenance/fixtures/marketmitra-synthetic-demo-v1.json",
+      "acquisition_timestamp": "2026-11-01T00:00:00Z",
+      "observation_period": {
+        "start": "2026-09-03",
+        "end": "2026-09-03",
+        "notes": "Synthetic observation date; no exchange observations are included"
+      },
+      "schema_version": "1",
+      "artifact_path": "fixtures/marketmitra-synthetic-demo-v1.json",
+      "sha256": "dd96c22973d06224a1afe55297f62b1c4c69fcadb12807cdd5b5953eb19f1bb4",
+      "transformation_version": "none",
+      "attribution_requirements": "Label as MarketMitra synthetic demo data; do not represent as NEPSE data",
+      "storage_permission": "project_generated",
+      "redistribution_public_display_permission": "project_generated",
+      "license_or_contract_evidence_reference": "Project-generated fixture committed with the MarketMitra source repository",
+      "authorization_status": "approved_synthetic",
+      "publication_approved": true
+    }
+  ]
+}

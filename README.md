@@ -129,6 +129,11 @@ npm run typecheck:test
 npm run build
 ```
 
+Future historical/demo deployment packaging, environment contracts, provenance
+gates, and recovery procedures are documented in [Deployment](docs/deployment.md),
+[Data provenance](docs/data-provenance.md), and the [operational runbooks](docs/runbooks/).
+These artifacts do not authorize deployment or publication of real market data.
+
 The excluded backend files require an explicitly confirmed disposable
 PostgreSQL database. GitHub Actions provisions and seeds that database in a
 separate integration job; safe local tests never connect to it implicitly.
