@@ -5,6 +5,7 @@ on:
     branches:
       - main
       - "chore/**"
+      - "security/**"
   pull_request:
     branches:
       - main
@@ -20,7 +21,7 @@ concurrency:
 jobs:
   backend-safe:
     name: Backend safe tests
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     defaults:
       run:
@@ -51,7 +52,7 @@ jobs:
 
   postgres-integration:
     name: PostgreSQL integration
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     services:
       postgres:
@@ -116,7 +117,7 @@ jobs:
 
   frontend:
     name: Frontend verification
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     defaults:
       run:
@@ -148,3 +149,22 @@ jobs:
         run: npm run build
         env:
           VITE_API_BASE_URL: https://api.example.invalid
+
+  backend-dependency-audit:
+    name: Backend dependency audit
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version-file: backend/.python-version
+      - name: Install isolated audit tool
+        run: python -m pip install --disable-pip-version-check pip-audit==2.10.1
+      - name: Audit pinned backend dependencies
+        run: python -m pip_audit --strict -r requirements.txt

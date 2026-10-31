@@ -14,6 +14,17 @@ _LOCAL_HOSTS = {"localhost", "127.0.0.1", "::1"}
 _PLACEHOLDER_CREDENTIALS = {"user", "username", "password", "pass", "changeme"}
 
 
+def _bounded_integer(name: str, default: int, minimum: int, maximum: int) -> int:
+    raw = os.getenv(name, str(default)).strip()
+    try:
+        value = int(raw)
+    except ValueError as exc:
+        raise ValueError(f"{name} must be an integer") from exc
+    if not minimum <= value <= maximum:
+        raise ValueError(f"{name} must be between {minimum} and {maximum}")
+    return value
+
+
 def get_application_environment() -> Literal["development", "test", "production"]:
     value = os.getenv("APP_ENV", "development").strip().lower()
     if value not in _VALID_ENVIRONMENTS:
@@ -27,6 +38,36 @@ def get_application_environment() -> Literal["development", "test", "production"
 def get_cors_origins() -> list[str]:
     raw = os.getenv("CORS_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173,http://127.0.0.1:5176")
     return [origin.strip() for origin in raw.split(",") if origin.strip()]
+
+
+def get_trusted_hosts() -> list[str]:
+    raw = os.getenv("TRUSTED_HOSTS", "localhost,127.0.0.1,testserver")
+    return [host.strip().lower() for host in raw.split(",") if host.strip()]
+
+
+def get_http_rate_limit() -> tuple[int, int, int]:
+    return (
+        _bounded_integer("HTTP_RATE_LIMIT_REQUESTS", 120, 1, 100_000),
+        _bounded_integer("HTTP_RATE_LIMIT_WINDOW_SECONDS", 60, 1, 3600),
+        _bounded_integer("HTTP_RATE_LIMIT_MAX_CLIENTS", 10_000, 1, 100_000),
+    )
+
+
+def get_websocket_connection_limit() -> int:
+    return _bounded_integer("WEBSOCKET_MAX_CONNECTIONS", 100, 1, 10_000)
+
+
+def hsts_enabled() -> bool:
+    if get_application_environment() != "production":
+        return False
+    https_deployment = os.getenv("HTTPS_DEPLOYMENT", "false").strip().lower()
+    enabled = os.getenv("HSTS_ENABLED", "false").strip().lower()
+    return https_deployment in {"1", "true", "yes", "on"} and enabled in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
 
 
 def _validate_production_origin(origin: str) -> None:
@@ -88,6 +129,30 @@ def validate_runtime_config() -> None:
         raise ValueError("Production requires explicit CORS_ORIGINS")
     for origin in origins:
         _validate_production_origin(origin)
+
+    if "TRUSTED_HOSTS" not in os.environ:
+        raise ValueError("Production requires explicit TRUSTED_HOSTS")
+    trusted_hosts = get_trusted_hosts()
+    if not trusted_hosts:
+        raise ValueError("Production requires explicit TRUSTED_HOSTS")
+    for host in trusted_hosts:
+        if (
+            host == "*"
+            or "://" in host
+            or "/" in host
+            or "@" in host
+            or any(character.isspace() for character in host)
+        ):
+            raise ValueError("Production TRUSTED_HOSTS must contain explicit hostnames")
+
+    hsts_requested = os.getenv("HSTS_ENABLED", "false").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+    if hsts_requested and not hsts_enabled():
+        raise ValueError("HSTS_ENABLED requires HTTPS_DEPLOYMENT=true")
 
     provider = os.getenv("LIVE_MARKET_PROVIDER", "").strip().lower()
     if provider == "replay":

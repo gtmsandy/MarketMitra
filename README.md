@@ -60,7 +60,15 @@ Use `MARKET_DATA_SOURCE=mock` when developing without PostgreSQL.
 
 Production uses `APP_ENV=production` and fails startup unless PostgreSQL,
 an encrypted remote `DATABASE_URL`, and explicit HTTPS `CORS_ORIGINS` are
-configured. Development and test retain the local mock and localhost defaults.
+configured. `TRUSTED_HOSTS` must also list each public API or health-check host;
+wildcards are rejected. Development and test retain local defaults.
+
+Production responses include content-type, referrer, frame and CSP protections.
+Set both `HTTPS_DEPLOYMENT=true` and `HSTS_ENABLED=true` only after HTTPS
+termination is verified. HTTP limiting uses the direct network peer, exempts
+health endpoints, and is intended for one application instance; enforce broader
+limits at the trusted reverse proxy. Production WebSockets require an Origin in
+`CORS_ORIGINS` and enforce the configured connection cap.
 
 Optional live synchronization is disabled by default. Enable it only with an authorized provider and its documented endpoint/credentials:
 

@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 from types import SimpleNamespace
 from typing import Iterator
 
+import pytest
 from fastapi import WebSocketDisconnect
 from fastapi.testclient import TestClient
 from starlette.routing import WebSocketRoute
@@ -89,6 +90,66 @@ def test_market_websocket_sends_canonical_snapshot(
         websocket_module.manager.active.clear()
 
 
+def test_production_websocket_accepts_allowed_origin(client, monkeypatch) -> None:
+    monkeypatch.setenv("APP_ENV", "production")
+    monkeypatch.setenv("CORS_ORIGINS", "https://marketmitra.example")
+    websocket_module.manager.active.clear()
+
+    with client.websocket_connect(
+        "/api/v1/ws/market", headers={"origin": "https://marketmitra.example"}
+    ) as websocket:
+        assert websocket.receive_json()["type"] == "snapshot"
+
+    assert websocket_module.manager.active == set()
+
+
+def test_production_websocket_rejects_disallowed_origin(client, monkeypatch) -> None:
+    monkeypatch.setenv("APP_ENV", "production")
+    monkeypatch.setenv("CORS_ORIGINS", "https://marketmitra.example")
+
+    with pytest.raises(WebSocketDisconnect) as exc_info:
+        with client.websocket_connect(
+            "/api/v1/ws/market", headers={"origin": "https://evil.example"}
+        ):
+            pass
+
+    assert exc_info.value.code == 1008
+
+
+def test_production_websocket_rejects_missing_origin(client, monkeypatch) -> None:
+    monkeypatch.setenv("APP_ENV", "production")
+    monkeypatch.setenv("CORS_ORIGINS", "https://marketmitra.example")
+
+    with pytest.raises(WebSocketDisconnect) as exc_info:
+        with client.websocket_connect("/api/v1/ws/market"):
+            pass
+
+    assert exc_info.value.code == 1008
+
+
+def test_development_websocket_allows_missing_origin(client, monkeypatch) -> None:
+    monkeypatch.setenv("APP_ENV", "development")
+
+    with client.websocket_connect("/api/v1/ws/market") as websocket:
+        assert websocket.receive_json()["type"] == "snapshot"
+
+
+def test_websocket_connection_cap_rejects_and_recovers(client, monkeypatch) -> None:
+    monkeypatch.setenv("APP_ENV", "development")
+    monkeypatch.setenv("WEBSOCKET_MAX_CONNECTIONS", "1")
+    websocket_module.manager.active.clear()
+
+    with client.websocket_connect("/api/v1/ws/market") as first:
+        assert first.receive_json()["type"] == "snapshot"
+        with pytest.raises(WebSocketDisconnect) as exc_info:
+            with client.websocket_connect("/api/v1/ws/market"):
+                pass
+        assert exc_info.value.code == 1013
+
+    with client.websocket_connect("/api/v1/ws/market") as recovered:
+        assert recovered.receive_json()["type"] == "snapshot"
+
+
 def test_market_websocket_disconnect_cleans_up_without_heartbeat_delay(
     monkeypatch,
 ) -> None:
@@ -126,6 +187,27 @@ def test_market_websocket_disconnect_cleans_up_without_heartbeat_delay(
 
     assert websocket.accepted is True
     assert websocket.messages[0]["type"] == "snapshot"
+    assert websocket_module.manager.active == set()
+
+
+def test_unexpected_websocket_failure_is_logged_without_exception_details(
+    caplog, monkeypatch
+) -> None:
+    class FailingWebSocket:
+        async def accept(self) -> None:
+            pass
+
+        async def send_json(self, _message: dict) -> None:
+            raise RuntimeError("credential=do-not-log")
+
+    monkeypatch.setenv("APP_ENV", "development")
+    websocket_module.manager.active.clear()
+
+    with caplog.at_level("ERROR"):
+        asyncio.run(websocket_module.market_socket(FailingWebSocket()))
+
+    assert "Unexpected market WebSocket failure" in caplog.text
+    assert "do-not-log" not in caplog.text
     assert websocket_module.manager.active == set()
 
 

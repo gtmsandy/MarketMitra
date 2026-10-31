@@ -11,6 +11,7 @@ def _set_valid_production_environment(monkeypatch: pytest.MonkeyPatch) -> None:
         "postgresql://marketmitra:secret@db.example.com/marketmitra?sslmode=require",
     )
     monkeypatch.setenv("CORS_ORIGINS", "https://marketmitra.example")
+    monkeypatch.setenv("TRUSTED_HOSTS", "api.marketmitra.example")
     monkeypatch.setenv("LIVE_MARKET_ENABLED", "false")
 
 
@@ -78,6 +79,33 @@ class TestApplicationEnvironment:
         from app.core.config import validate_runtime_config
 
         with pytest.raises(ValueError, match="CORS_ORIGINS"):
+            validate_runtime_config()
+
+    @pytest.mark.parametrize("trusted_hosts", [None, "", "*"])
+    def test_production_requires_explicit_non_wildcard_trusted_hosts(
+        self, monkeypatch: pytest.MonkeyPatch, trusted_hosts: str | None
+    ) -> None:
+        _set_valid_production_environment(monkeypatch)
+        if trusted_hosts is None:
+            monkeypatch.delenv("TRUSTED_HOSTS")
+        else:
+            monkeypatch.setenv("TRUSTED_HOSTS", trusted_hosts)
+
+        from app.core.config import validate_runtime_config
+
+        with pytest.raises(ValueError, match="TRUSTED_HOSTS"):
+            validate_runtime_config()
+
+    def test_production_rejects_hsts_without_https_deployment(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        _set_valid_production_environment(monkeypatch)
+        monkeypatch.setenv("HSTS_ENABLED", "true")
+        monkeypatch.setenv("HTTPS_DEPLOYMENT", "false")
+
+        from app.core.config import validate_runtime_config
+
+        with pytest.raises(ValueError, match="HTTPS_DEPLOYMENT=true"):
             validate_runtime_config()
 
     @pytest.mark.parametrize(
