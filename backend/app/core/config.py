@@ -1,16 +1,110 @@
 import os
 from typing import Literal
+from urllib.parse import urlsplit
 
 from dotenv import load_dotenv
+from sqlalchemy.engine import make_url
+from sqlalchemy.exc import ArgumentError
 
 load_dotenv()
 
 _VALID_SOURCES = ("mock", "postgres")
+_VALID_ENVIRONMENTS = ("development", "test", "production")
+_LOCAL_HOSTS = {"localhost", "127.0.0.1", "::1"}
+_PLACEHOLDER_CREDENTIALS = {"user", "username", "password", "pass", "changeme"}
+
+
+def get_application_environment() -> Literal["development", "test", "production"]:
+    value = os.getenv("APP_ENV", "development").strip().lower()
+    if value not in _VALID_ENVIRONMENTS:
+        raise ValueError(
+            f"Invalid APP_ENV={value!r}. "
+            f"Must be one of: {', '.join(_VALID_ENVIRONMENTS)}."
+        )
+    return value  # type: ignore[return-value]
 
 
 def get_cors_origins() -> list[str]:
     raw = os.getenv("CORS_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173,http://127.0.0.1:5176")
     return [origin.strip() for origin in raw.split(",") if origin.strip()]
+
+
+def _validate_production_origin(origin: str) -> None:
+    parsed = urlsplit(origin)
+    if (
+        parsed.scheme != "https"
+        or not parsed.hostname
+        or parsed.hostname in _LOCAL_HOSTS
+        or parsed.username is not None
+        or parsed.password is not None
+        or parsed.query
+        or parsed.fragment
+        or parsed.path not in {"", "/"}
+    ):
+        raise ValueError(
+            "Production CORS_ORIGINS must contain only explicit HTTPS origins"
+        )
+
+
+def validate_runtime_config() -> None:
+    """Fail closed for unsafe production configuration.
+
+    Development and test retain their existing convenient defaults. Production
+    requires an explicit PostgreSQL database and browser origin, and never
+    permits the deterministic replay provider.
+    """
+    if get_application_environment() != "production":
+        return
+
+    if get_market_data_source() != "postgres":
+        raise ValueError("Production requires MARKET_DATA_SOURCE=postgres")
+
+    raw_database_url = get_database_url()
+    try:
+        database_url = make_url(raw_database_url)
+    except ArgumentError as exc:
+        raise ValueError("Production requires a valid PostgreSQL DATABASE_URL") from exc
+
+    if not database_url.drivername.startswith("postgresql"):
+        raise ValueError("Production requires a PostgreSQL DATABASE_URL")
+    if database_url.host in _LOCAL_HOSTS or not database_url.host:
+        raise ValueError("Production requires a remote database host")
+    if not database_url.database:
+        raise ValueError("Production DATABASE_URL must name a database")
+    if not database_url.username or not database_url.password:
+        raise ValueError("Production DATABASE_URL must include database credentials")
+    if (
+        database_url.username.lower() in _PLACEHOLDER_CREDENTIALS
+        or database_url.password.lower() in _PLACEHOLDER_CREDENTIALS
+    ):
+        raise ValueError("Production rejects placeholder database credentials")
+    if database_url.query.get("sslmode") not in {"require", "verify-ca", "verify-full"}:
+        raise ValueError("Production requires an encrypted database connection")
+
+    if "CORS_ORIGINS" not in os.environ:
+        raise ValueError("Production requires explicit CORS_ORIGINS")
+    origins = get_cors_origins()
+    if not origins:
+        raise ValueError("Production requires explicit CORS_ORIGINS")
+    for origin in origins:
+        _validate_production_origin(origin)
+
+    provider = os.getenv("LIVE_MARKET_PROVIDER", "").strip().lower()
+    if provider == "replay":
+        raise ValueError("Production does not permit the replay live provider")
+    if not is_live_market_enabled():
+        return
+
+    authorized = os.getenv("LIVE_MARKET_AUTHORIZED", "false").strip().lower()
+    if authorized not in {"1", "true", "yes", "on"}:
+        raise ValueError("Production live polling requires explicit authorization")
+    provider_name = os.getenv("NEPSE_PROVIDER_NAME", "").strip().lower()
+    if not provider_name or provider_name == "unconfigured":
+        raise ValueError("Production live polling requires NEPSE_PROVIDER_NAME")
+    live_url = os.getenv("NEPSE_LIVE_API_URL", "").strip()
+    parsed_live_url = urlsplit(live_url)
+    if parsed_live_url.scheme != "https" or not parsed_live_url.hostname:
+        raise ValueError("Production live polling requires an HTTPS provider URL")
 
 
 def get_market_data_source() -> Literal["mock", "postgres"]:

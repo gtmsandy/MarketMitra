@@ -26,6 +26,7 @@ jobs:
       run:
         working-directory: backend
     env:
+      APP_ENV: test
       MARKET_DATA_SOURCE: mock
       LIVE_MARKET_ENABLED: "false"
       PYTHONDONTWRITEBYTECODE: "1"
@@ -70,6 +71,7 @@ jobs:
       run:
         working-directory: backend
     env:
+      APP_ENV: test
       DATABASE_URL: postgresql://marketmitra_ci:ci_only_password@127.0.0.1:5432/marketmitra_ci
       MARKETMITRA_CONFIRM_DISPOSABLE: marketmitra_ci
       MARKET_DATA_SOURCE: postgres
@@ -144,3 +146,5 @@ jobs:
         run: npm run typecheck:test
       - name: Build production frontend
         run: npm run build
+        env:
+          VITE_API_BASE_URL: https://api.example.invalid

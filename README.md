@@ -50,6 +50,7 @@ alembic upgrade head
 Create `backend/.env` using placeholders:
 
 ```env
+APP_ENV=development
 CORS_ORIGINS=http://localhost:5173
 MARKET_DATA_SOURCE=postgres
 DATABASE_URL=postgresql://<user>:<password>@localhost:5432/<database>
@@ -57,10 +58,15 @@ DATABASE_URL=postgresql://<user>:<password>@localhost:5432/<database>
 
 Use `MARKET_DATA_SOURCE=mock` when developing without PostgreSQL.
 
+Production uses `APP_ENV=production` and fails startup unless PostgreSQL,
+an encrypted remote `DATABASE_URL`, and explicit HTTPS `CORS_ORIGINS` are
+configured. Development and test retain the local mock and localhost defaults.
+
 Optional live synchronization is disabled by default. Enable it only with an authorized provider and its documented endpoint/credentials:
 
 ```env
 LIVE_MARKET_ENABLED=false
+LIVE_MARKET_AUTHORIZED=false
 NEPSE_PROVIDER_NAME=unconfigured
 NEPSE_LIVE_API_URL=
 NEPSE_LIVE_API_KEY=
@@ -83,6 +89,10 @@ python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 
 Health: `http://127.0.0.1:8000/api/v1/health`
 
+Process liveness is available at `/api/v1/health/live`. Runtime readiness is
+available at `/api/v1/health/ready` and returns HTTP 503 when required
+configuration, database connectivity, or the Alembic revision is not ready.
+
 ## Running the frontend
 
 ```bash
@@ -92,6 +102,8 @@ npm run dev
 ```
 
 The development interface is served at the Vite URL shown in the terminal.
+Production frontend builds require `VITE_API_BASE_URL` to be an explicit HTTPS
+API origin; development falls back to `http://127.0.0.1:8000` when it is unset.
 
 ## Testing
 

@@ -8,6 +8,7 @@ import {
 
 import { apiBaseUrl } from '../api/client'
 import { getHealth } from '../api/health'
+import { toWebSocketUrl } from '../config/runtime'
 
 export type LiveConnectionState =
   | 'CONNECTING'
@@ -133,12 +134,7 @@ export function LiveMarketProvider({ children }: { children: ReactNode }) {
       clearReconnectTimer()
       setConnection(retryAttempt === 0 ? 'CONNECTING' : 'RECONNECTING')
 
-      const parsedApiUrl = new URL(apiBaseUrl)
-      const websocketProtocol =
-        parsedApiUrl.protocol === 'https:' ? 'wss:' : 'ws:'
-      const websocket = new WebSocket(
-        `${websocketProtocol}//${parsedApiUrl.host}/api/v1/ws/market`,
-      )
+      const websocket = new WebSocket(toWebSocketUrl(apiBaseUrl))
       activeSocket = websocket
 
       websocket.onopen = () => {

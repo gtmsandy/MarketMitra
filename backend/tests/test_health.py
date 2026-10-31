@@ -1,9 +1,105 @@
 from datetime import datetime, timezone
+from pathlib import Path
 import pytest
+from alembic.config import Config
+from alembic.script import ScriptDirectory
 from fastapi.testclient import TestClient
+from sqlalchemy import text
 
 from app.db.base import Base, make_engine, make_session_factory
 from app.db.models import IngestionRun, MarketSnapshot
+
+
+class TestRuntimeHealthContracts:
+    def test_liveness_has_no_database_dependency(
+        self, client: TestClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("MARKET_DATA_SOURCE", "postgres")
+        monkeypatch.delenv("DATABASE_URL", raising=False)
+
+        response = client.get("/api/v1/health/live")
+
+        assert response.status_code == 200
+        assert response.json() == {"status": "ok", "service": "marketmitra-api"}
+
+    def test_readiness_succeeds_with_healthy_dependencies(
+        self, client: TestClient
+    ) -> None:
+        from app.api.routes.health import get_readiness_checker
+
+        client.app.dependency_overrides[get_readiness_checker] = lambda: lambda: None
+        try:
+            response = client.get("/api/v1/health/ready")
+        finally:
+            client.app.dependency_overrides.pop(get_readiness_checker, None)
+
+        assert response.status_code == 200
+        assert response.json() == {"status": "ready", "service": "marketmitra-api"}
+
+    def test_readiness_returns_503_when_database_is_unavailable(
+        self, client: TestClient
+    ) -> None:
+        from app.api.routes.health import get_readiness_checker
+
+        def unavailable() -> None:
+            raise RuntimeError("database connection failed with secret details")
+
+        client.app.dependency_overrides[get_readiness_checker] = lambda: unavailable
+        try:
+            response = client.get("/api/v1/health/ready")
+        finally:
+            client.app.dependency_overrides.pop(get_readiness_checker, None)
+
+        assert response.status_code == 503
+        assert response.json() == {
+            "detail": {"status": "not_ready", "service": "marketmitra-api"}
+        }
+
+    def test_readiness_accepts_current_migration_revision(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path
+    ) -> None:
+        from app.api.routes.health import check_runtime_readiness
+
+        db_url = f"sqlite:///{tmp_path / 'ready.db'}"
+        engine = make_engine(db_url)
+        Base.metadata.create_all(engine)
+        config = Config(str(Path(__file__).resolve().parents[1] / "alembic.ini"))
+        current_head = ScriptDirectory.from_config(config).get_current_head()
+        with engine.begin() as connection:
+            connection.execute(text("CREATE TABLE alembic_version (version_num VARCHAR(32))"))
+            connection.execute(
+                text("INSERT INTO alembic_version (version_num) VALUES (:head)"),
+                {"head": current_head},
+            )
+        engine.dispose()
+
+        monkeypatch.setenv("APP_ENV", "test")
+        monkeypatch.setenv("MARKET_DATA_SOURCE", "postgres")
+        monkeypatch.setenv("DATABASE_URL", db_url)
+
+        check_runtime_readiness()
+
+    def test_readiness_rejects_stale_migration_revision(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path
+    ) -> None:
+        from app.api.routes.health import check_runtime_readiness
+
+        db_url = f"sqlite:///{tmp_path / 'stale.db'}"
+        engine = make_engine(db_url)
+        Base.metadata.create_all(engine)
+        with engine.begin() as connection:
+            connection.execute(text("CREATE TABLE alembic_version (version_num VARCHAR(32))"))
+            connection.execute(
+                text("INSERT INTO alembic_version (version_num) VALUES ('0001')")
+            )
+        engine.dispose()
+
+        monkeypatch.setenv("APP_ENV", "test")
+        monkeypatch.setenv("MARKET_DATA_SOURCE", "postgres")
+        monkeypatch.setenv("DATABASE_URL", db_url)
+
+        with pytest.raises(RuntimeError, match="migration revision"):
+            check_runtime_readiness()
 
 
 class TestHealthEndpoint:

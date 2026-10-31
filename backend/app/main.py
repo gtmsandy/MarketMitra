@@ -4,12 +4,13 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.router import api_router
-from app.core.config import get_cors_origins
+from app.core.config import get_cors_origins, validate_runtime_config
 from app.core.config import get_database_url, get_live_market_poll_interval, is_live_market_enabled
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
+    validate_runtime_config()
     worker = None
     if is_live_market_enabled() and (os.getenv("NEPSE_LIVE_API_URL") or os.getenv("LIVE_MARKET_PROVIDER", "").lower() == "replay"):
         from app.db.base import make_session_factory

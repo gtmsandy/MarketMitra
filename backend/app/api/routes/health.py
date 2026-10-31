@@ -1,16 +1,81 @@
 from datetime import datetime
 import os
-from typing import Literal
+from pathlib import Path
+from typing import Annotated, Callable, Literal
 
-from fastapi import APIRouter
+from alembic.config import Config
+from alembic.runtime.migration import MigrationContext
+from alembic.script import ScriptDirectory
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import text
 
-from app.core.config import get_database_url, get_market_data_source
+from app.core.config import (
+    get_database_url,
+    get_market_data_source,
+    validate_runtime_config,
+)
 from app.core.freshness import calculate_data_freshness
 from app.core.market_schedule import get_market_status
 
 router = APIRouter(tags=["health"])
+
+
+class LivenessResponse(BaseModel):
+    status: Literal["ok"]
+    service: Literal["marketmitra-api"]
+
+
+class ReadinessResponse(BaseModel):
+    status: Literal["ready"]
+    service: Literal["marketmitra-api"]
+
+
+def check_runtime_readiness() -> None:
+    """Validate required configuration, connectivity, and migration revision."""
+    validate_runtime_config()
+    if get_market_data_source() != "postgres":
+        return
+
+    from app.db.base import make_engine
+
+    engine = make_engine(get_database_url())
+    try:
+        with engine.connect() as connection:
+            connection.execute(text("SELECT 1"))
+            current_heads = set(
+                MigrationContext.configure(connection).get_current_heads()
+            )
+
+        alembic_config = Config(str(Path(__file__).resolve().parents[3] / "alembic.ini"))
+        expected_heads = set(ScriptDirectory.from_config(alembic_config).get_heads())
+        if current_heads != expected_heads:
+            raise RuntimeError("Database migration revision is not current")
+    finally:
+        engine.dispose()
+
+
+def get_readiness_checker() -> Callable[[], None]:
+    return check_runtime_readiness
+
+
+@router.get("/health/live", response_model=LivenessResponse)
+def get_liveness() -> LivenessResponse:
+    return LivenessResponse(status="ok", service="marketmitra-api")
+
+
+@router.get("/health/ready", response_model=ReadinessResponse)
+def get_readiness(
+    checker: Annotated[Callable[[], None], Depends(get_readiness_checker)],
+) -> ReadinessResponse:
+    try:
+        checker()
+    except Exception as exc:
+        raise HTTPException(
+            status_code=503,
+            detail={"status": "not_ready", "service": "marketmitra-api"},
+        ) from exc
+    return ReadinessResponse(status="ready", service="marketmitra-api")
 
 
 class IngestionSummary(BaseModel):

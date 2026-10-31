@@ -3,6 +3,171 @@
 import pytest
 
 
+def _set_valid_production_environment(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("APP_ENV", "production")
+    monkeypatch.setenv("MARKET_DATA_SOURCE", "postgres")
+    monkeypatch.setenv(
+        "DATABASE_URL",
+        "postgresql://marketmitra:secret@db.example.com/marketmitra?sslmode=require",
+    )
+    monkeypatch.setenv("CORS_ORIGINS", "https://marketmitra.example")
+    monkeypatch.setenv("LIVE_MARKET_ENABLED", "false")
+
+
+class TestApplicationEnvironment:
+    def test_development_defaults_remain_valid(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.delenv("APP_ENV", raising=False)
+        monkeypatch.delenv("MARKET_DATA_SOURCE", raising=False)
+        monkeypatch.delenv("CORS_ORIGINS", raising=False)
+
+        from app.core.config import get_application_environment, validate_runtime_config
+
+        assert get_application_environment() == "development"
+        validate_runtime_config()
+
+    def test_valid_explicit_production_configuration(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        _set_valid_production_environment(monkeypatch)
+
+        from app.core.config import validate_runtime_config
+
+        validate_runtime_config()
+
+    @pytest.mark.parametrize("value", ["", "staging", "prod"])
+    def test_invalid_application_environment_is_rejected(
+        self, monkeypatch: pytest.MonkeyPatch, value: str
+    ) -> None:
+        monkeypatch.setenv("APP_ENV", value)
+
+        from app.core.config import get_application_environment
+
+        with pytest.raises(ValueError, match="Invalid APP_ENV"):
+            get_application_environment()
+
+    def test_production_rejects_missing_database_url(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        _set_valid_production_environment(monkeypatch)
+        monkeypatch.delenv("DATABASE_URL")
+
+        from app.core.config import validate_runtime_config
+
+        with pytest.raises(ValueError, match="DATABASE_URL"):
+            validate_runtime_config()
+
+    def test_production_rejects_implicit_mock_source(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        _set_valid_production_environment(monkeypatch)
+        monkeypatch.setenv("MARKET_DATA_SOURCE", "mock")
+
+        from app.core.config import validate_runtime_config
+
+        with pytest.raises(ValueError, match="MARKET_DATA_SOURCE=postgres"):
+            validate_runtime_config()
+
+    def test_production_requires_explicit_frontend_origins(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        _set_valid_production_environment(monkeypatch)
+        monkeypatch.delenv("CORS_ORIGINS")
+
+        from app.core.config import validate_runtime_config
+
+        with pytest.raises(ValueError, match="CORS_ORIGINS"):
+            validate_runtime_config()
+
+    @pytest.mark.parametrize(
+        "database_url, message",
+        [
+            (
+                "postgresql://marketmitra:secret@localhost/marketmitra?sslmode=require",
+                "remote database host",
+            ),
+            (
+                "postgresql://user:password@db.example.com/marketmitra?sslmode=require",
+                "placeholder database credentials",
+            ),
+            (
+                "postgresql://marketmitra:secret@db.example.com/marketmitra",
+                "encrypted database connection",
+            ),
+            ("sqlite:///marketmitra.db", "PostgreSQL DATABASE_URL"),
+        ],
+    )
+    def test_production_rejects_unsafe_database_urls(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        database_url: str,
+        message: str,
+    ) -> None:
+        _set_valid_production_environment(monkeypatch)
+        monkeypatch.setenv("DATABASE_URL", database_url)
+
+        from app.core.config import validate_runtime_config
+
+        with pytest.raises(ValueError, match=message):
+            validate_runtime_config()
+
+    def test_production_rejects_replay_provider(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        _set_valid_production_environment(monkeypatch)
+        monkeypatch.setenv("LIVE_MARKET_ENABLED", "true")
+        monkeypatch.setenv("LIVE_MARKET_PROVIDER", "replay")
+
+        from app.core.config import validate_runtime_config
+
+        with pytest.raises(ValueError, match="replay"):
+            validate_runtime_config()
+
+    def test_production_live_polling_requires_explicit_authorization(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        _set_valid_production_environment(monkeypatch)
+        monkeypatch.setenv("LIVE_MARKET_ENABLED", "true")
+        monkeypatch.setenv("LIVE_MARKET_PROVIDER", "external")
+        monkeypatch.setenv("NEPSE_PROVIDER_NAME", "licensed-provider")
+        monkeypatch.setenv("NEPSE_LIVE_API_URL", "https://feed.example.com")
+        monkeypatch.delenv("LIVE_MARKET_AUTHORIZED", raising=False)
+
+        from app.core.config import validate_runtime_config
+
+        with pytest.raises(ValueError, match="explicit authorization"):
+            validate_runtime_config()
+
+    def test_production_accepts_deliberately_authorized_live_provider(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        _set_valid_production_environment(monkeypatch)
+        monkeypatch.setenv("LIVE_MARKET_ENABLED", "true")
+        monkeypatch.setenv("LIVE_MARKET_PROVIDER", "external")
+        monkeypatch.setenv("LIVE_MARKET_AUTHORIZED", "true")
+        monkeypatch.setenv("NEPSE_PROVIDER_NAME", "licensed-provider")
+        monkeypatch.setenv("NEPSE_LIVE_API_URL", "https://feed.example.com")
+
+        from app.core.config import validate_runtime_config
+
+        validate_runtime_config()
+
+    def test_application_startup_rejects_invalid_production_configuration(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from fastapi.testclient import TestClient
+
+        from app.main import app
+
+        monkeypatch.setenv("APP_ENV", "production")
+        monkeypatch.setenv("MARKET_DATA_SOURCE", "mock")
+
+        with pytest.raises(ValueError, match="MARKET_DATA_SOURCE=postgres"):
+            with TestClient(app):
+                pass
+
+
 class TestMarketDataSource:
     """get_market_data_source() behaviour under different env values."""
 

@@ -1,5 +1,9 @@
-export const apiBaseUrl =
-  import.meta.env.VITE_API_BASE_URL ?? 'http://127.0.0.1:8000'
+import { resolveApiBaseUrl } from '../config/runtime'
+
+export const apiBaseUrl = resolveApiBaseUrl({
+  mode: import.meta.env.MODE,
+  configuredUrl: import.meta.env.VITE_API_BASE_URL,
+})
 
 export async function fetchJson<T>(path: string): Promise<T> {
   const response = await fetch(`${apiBaseUrl}${path}`)
