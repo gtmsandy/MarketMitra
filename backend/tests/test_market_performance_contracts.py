@@ -116,6 +116,77 @@ def test_market_mover_ties_have_stable_turnover_then_symbol_order() -> None:
         engine.dispose()
 
 
+def test_loser_ties_have_stable_turnover_then_symbol_order() -> None:
+    engine, session = _make_market(5, -1.0)
+    try:
+        expected = ["SYM004", "SYM003", "SYM002", "SYM001", "SYM000"]
+
+        assert [
+            row.symbol for row in PostgresMarketProvider(session).get_top_losers()
+        ] == expected
+    finally:
+        session.close()
+        engine.dispose()
+
+
+def test_market_movers_preserve_sign_rules_fields_and_turnover_ranking() -> None:
+    engine, session = _make_market(3, 0.0)
+    try:
+        positive, negative, unchanged = session.query(DailyPrice).order_by(
+            DailyPrice.symbol
+        ).all()
+        positive.close = 105.0
+        positive.change = 5.0
+        positive.change_percent = 5.0
+        positive.volume = 1_500
+        positive.turnover = 150_000.0
+        negative.close = 95.0
+        negative.change = -5.0
+        negative.change_percent = -5.0
+        negative.volume = 3_000
+        negative.turnover = 300_000.0
+        unchanged.close = 100.0
+        unchanged.change = 0.0
+        unchanged.change_percent = 0.0
+        unchanged.volume = 2_000
+        unchanged.turnover = 200_000.0
+        session.commit()
+        session.expunge_all()
+
+        provider = PostgresMarketProvider(session)
+
+        assert [row.model_dump() for row in provider.get_top_gainers()] == [{
+            "symbol": "SYM000", "company_name": "Company 000", "ltp": 105.0,
+            "change_percent": 5.0, "volume": 1_500,
+            "observation_date": "2026-09-03",
+        }]
+        assert [row.model_dump() for row in provider.get_top_losers()] == [{
+            "symbol": "SYM001", "company_name": "Company 001", "ltp": 95.0,
+            "change_percent": -5.0, "volume": 3_000,
+            "observation_date": "2026-09-03",
+        }]
+        assert [row.model_dump() for row in provider.get_most_active()] == [
+            {
+                "symbol": "SYM001", "company_name": "Company 001", "ltp": 95.0,
+                "volume": 3_000, "turnover": 300_000.0,
+                "observation_date": "2026-09-03",
+            },
+            {
+                "symbol": "SYM002", "company_name": "Company 002", "ltp": 100.0,
+                "volume": 2_000, "turnover": 200_000.0,
+                "observation_date": "2026-09-03",
+            },
+            {
+                "symbol": "SYM000", "company_name": "Company 000", "ltp": 105.0,
+                "volume": 1_500, "turnover": 150_000.0,
+                "observation_date": "2026-09-03",
+            },
+        ]
+    finally:
+        session.close()
+        engine.dispose()
+
+
 def test_rankings_use_latest_valid_common_equity_session() -> None:
     engine, session = _make_market(2, 1.0)
     try:

@@ -4,7 +4,7 @@ from typing import Literal
 
 from sqlalchemy import and_, func, or_, text
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, contains_eager
 
 from app.db.models import DailyPrice, Instrument, LiveQuote
 from app.models.market import HeatmapItem, MarketBreadth, SectorPerformance
@@ -171,6 +171,7 @@ class PostgresDailyPriceRepository(DailyPriceRepository):
     def get_prices_for_session(self, session_date: str, security_type: str = "EQUITY") -> list[DailyPrice]:
         return (self._session.query(DailyPrice)
                 .join(DailyPrice.instrument)
+                .options(contains_eager(DailyPrice.instrument))
                 .filter(DailyPrice.date == session_date, Instrument.security_type == security_type, DailyPrice.is_ohlc_valid.is_(True))
                 .order_by(DailyPrice.turnover.desc(), DailyPrice.symbol.asc()).all())
 

@@ -1,8 +1,6 @@
-"""SQLite query-count baselines for PostgreSQL-backed market provider paths.
+"""SQLite query-count contracts for PostgreSQL-backed market provider paths.
 
-Stock listing and search enforce the Milestone 7B constant-query budget. The
-remaining mover tests intentionally describe current query growth; they are
-diagnostic contracts, not endorsements of that N+1 behavior.
+Stock listing/search and market movers enforce their constant-query budgets.
 """
 
 from collections.abc import Callable
@@ -120,17 +118,18 @@ def test_stock_query_count_is_constant(
     ],
     ids=lambda value: value if isinstance(value, str) else None,
 )
-def test_market_mover_query_counts_grow_with_instrument_count(
+def test_market_mover_query_count_is_constant(
     name: str,
     change_percent: float,
     call: ProviderCall,
 ) -> None:
-    small_count, small_result = _measure_provider_call(2, change_percent, call)
-    large_count, large_result = _measure_provider_call(5, change_percent, call)
+    measurements = [
+        _measure_provider_call(size, change_percent, call)
+        for size in (2, 5, 20, 50)
+    ]
 
-    assert len(small_result) == 2, name
-    assert len(large_result) == 5, name
-    assert large_count - small_count == 3, name
+    assert [len(result) for _, result in measurements] == [2, 5, 20, 50], name
+    assert {count for count, _ in measurements} == {2}, name
 
 
 def test_measurement_listener_is_detached_after_context_exit() -> None:

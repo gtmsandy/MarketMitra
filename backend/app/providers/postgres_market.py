@@ -79,9 +79,7 @@ class PostgresMarketProvider(MarketDataProvider):
         active = sorted(latest_prices, key=lambda p: p.turnover, reverse=True)
         result = []
         for price in active:
-            instrument = self._instruments.get_by_symbol(price.symbol)
-            if instrument is None:
-                continue
+            instrument = price.instrument
             result.append(MostActiveStock(
                 symbol=instrument.symbol,
                 company_name=instrument.company_name,
@@ -224,10 +222,10 @@ class PostgresMarketProvider(MarketDataProvider):
         return prices
 
     def _to_market_mover(self, price) -> MarketMover:
-        instrument = self._instruments.get_by_symbol(price.symbol)
+        instrument = price.instrument
         return MarketMover(
             symbol=price.symbol,
-            company_name=instrument.company_name if instrument else price.symbol,
+            company_name=instrument.company_name,
             ltp=price.close,
             change_percent=price.change_percent,
             volume=price.volume,

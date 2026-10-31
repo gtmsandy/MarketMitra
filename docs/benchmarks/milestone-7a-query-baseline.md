@@ -67,6 +67,30 @@ benchmark environment described below is available. The change is retained on
 the independently reproducible query-count reduction and green equivalence
 contracts; it makes no claim about PostgreSQL wall-clock improvement.
 
+## Milestone 7C result
+
+The session-price query now uses its existing instrument join to populate the
+`DailyPrice.instrument` relationship. Gainers, losers, and most-active consume
+that already-loaded relationship instead of issuing one instrument lookup per
+result. The common-session lookup remains separate and unchanged.
+
+| Path | 2 instruments | 5 instruments | 20 instruments | 50 instruments | Result |
+| --- | ---: | ---: | ---: | ---: | --- |
+| Gainers, all rows positive | 2 | 2 | 2 | 2 | Kept |
+| Losers, all rows negative | 2 | 2 | 2 | 2 | Kept |
+| Most active | 2 | 2 | 2 | 2 | Kept |
+
+This eliminates 2, 5, 20, and 50 per-result instrument statements at those
+fixture sizes. Correctness contracts preserve the latest common valid equity
+session, valid-OHLC and equity filtering, positive/negative/zero inclusion,
+complete response fields, stable turnover/symbol tie-breaking, change ranking,
+turnover ranking, and observation-date metadata.
+
+The PostgreSQL dialect compiles the session query to one parameterized join
+that selects both daily-price and instrument columns. No PostgreSQL connection,
+timing run, or execution-plan measurement was performed, so PostgreSQL latency
+improvement remains unmeasured.
+
 Serialized provider-result sizes also grew linearly:
 
 | Path | 2 rows | 5 rows | 20 rows |
