@@ -1,4 +1,4 @@
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from sqlalchemy.orm import Session
 
 from app.models.market import (
@@ -126,15 +126,14 @@ class PostgresMarketProvider(MarketDataProvider):
         if price is None:
             return None
 
-        history = self._prices.get_by_symbol(symbol.upper())
-        from datetime import timedelta
         latest_date = date.fromisoformat(price.date)
         window_start = latest_date - timedelta(weeks=52)
-        window = [p for p in history if window_start <= date.fromisoformat(p.date) <= latest_date]
-        high_52w = max((p.high for p in window), default=price.high)
-        low_52w = min((p.low for p in window), default=price.low)
+        history = self._prices.get_by_symbol_and_date_range(
+            symbol.upper(), window_start.isoformat(), price.date
+        )
+        high_52w = max((p.high for p in history), default=price.high)
+        low_52w = min((p.low for p in history), default=price.low)
 
-        price_date = date.fromisoformat(price.date)
         latest_snapshot = self._snapshots.get_latest()
         last_updated = datetime.fromisoformat(f"{price.date}T00:00:00+00:00")
         return StockDetail(

@@ -91,6 +91,30 @@ that selects both daily-price and instrument columns. No PostgreSQL connection,
 timing run, or execution-plan measurement was performed, so PostgreSQL latency
 improvement remains unmeasured.
 
+## Milestone 7D result
+
+Stock detail still performs four statements: instrument lookup, latest valid
+price lookup, 52-week history lookup, and latest-snapshot lookup. The history
+statement now reuses `get_by_symbol_and_date_range()` instead of loading every
+retained valid observation and filtering it in Python.
+
+The window remains anchored to the latest valid price date. It starts exactly
+52 weeks (364 days) earlier and includes both the start and anchor dates.
+Deterministic calendar-daily SQLite fixtures measure:
+
+| Retained valid rows | Before | After | SQL statements before/after |
+| ---: | ---: | ---: | ---: |
+| 5 | 5 | 5 | 4 / 4 |
+| 400 | 400 | 365 | 4 / 4 |
+| 1,000 | 1,000 | 365 | 4 / 4 |
+
+The 365-row maximum in these fixtures is the inclusive result of a 364-day
+span; real trading datasets normally contain fewer observations. Exact response
+contracts preserve the computed high and low, all other stock-detail fields and
+timestamps, invalid-OHLC exclusion, sparse history, and missing-price behavior.
+PostgreSQL row-transfer and latency improvements remain unmeasured because no
+isolated PostgreSQL benchmark database was available.
+
 Serialized provider-result sizes also grew linearly:
 
 | Path | 2 rows | 5 rows | 20 rows |
