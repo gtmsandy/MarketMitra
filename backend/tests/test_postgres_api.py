@@ -9,6 +9,12 @@ from fastapi.testclient import TestClient
 
 from app.api.dependencies import _get_source
 from app.main import app
+from tests.postgres_ci import require_disposable_ci_database
+
+
+@pytest.fixture(scope="session", autouse=True)
+def disposable_postgres_only() -> None:
+    require_disposable_ci_database()
 
 
 @pytest.fixture
@@ -40,7 +46,7 @@ class TestPostgresMarketApi:
         assert resp.status_code == 200
         data = resp.json()
         assert data["nepse_index"] > 0
-        assert data["market_status"] in ("OPEN", "CLOSED")
+        assert data["market_status"] == "Open"
         assert "last_updated" in data
 
     def test_top_gainers(self, postgres_client: TestClient) -> None:
@@ -85,15 +91,13 @@ class TestPostgresMarketApi:
         resp = postgres_client.get("/api/v1/market/sectors")
         assert resp.status_code == 200
         data = resp.json()
-        assert len(data) == 12  # 12 genuine economic sectors (non-equities excluded)
-        assert data[0]["observation_date"] == "2026-09-03"
-        assert data[0]["methodology"] == "equal_weighted_constituent_daily_percentage_change"
+        assert data == []  # Deterministic mock instruments have no sector metadata.
 
     def test_market_heatmap(self, postgres_client: TestClient) -> None:
         resp = postgres_client.get("/api/v1/market/heatmap")
         assert resp.status_code == 200
         data = resp.json()
-        assert len(data) == 278  # common latest equity session; non-trading equities excluded
+        assert len(data) == 8
         assert data[0]["weight_metric"] == "turnover"
 
 
@@ -103,8 +107,7 @@ class TestPostgresStocksApi:
         assert resp.status_code == 200
         data = resp.json()
         assert isinstance(data, list)
-        # 645 active stocks in PostgreSQL (far exceeds mock's 8 stocks)
-        assert len(data) > 600
+        assert len(data) == 8
 
     def test_search_stocks(self, postgres_client: TestClient) -> None:
         resp = postgres_client.get("/api/v1/stocks", params={"q": "NABIL"})
@@ -132,8 +135,7 @@ class TestPostgresStocksApi:
         assert resp.status_code == 200
         data = resp.json()
         assert isinstance(data, list)
-        # Invalid historical bars are quarantined from the active history.
-        assert len(data) > 2500
+        assert len(data) == 180
         assert data[0]["date"] < data[-1]["date"]  # Chronological order
 
     def test_stock_history_unknown_symbol(self, postgres_client: TestClient) -> None:

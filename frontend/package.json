@@ -8,6 +8,9 @@
     "test": "vitest run --configLoader runner --no-fsModuleCache",
     "build": "tsc -b && vite build",
     "lint": "oxlint",
+    "typecheck:app": "tsc -p tsconfig.app.json --noEmit",
+    "typecheck:tooling": "tsc -p tsconfig.node.json --noEmit",
+    "typecheck:test": "tsc -p tsconfig.test.json --noEmit",
     "preview": "vite preview"
   },
   "dependencies": {

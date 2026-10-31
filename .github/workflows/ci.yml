@@ -1,0 +1,146 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+      - "chore/**"
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend-safe:
+    name: Backend safe tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: backend
+    env:
+      MARKET_DATA_SOURCE: mock
+      LIVE_MARKET_ENABLED: "false"
+      PYTHONDONTWRITEBYTECODE: "1"
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version-file: backend/.python-version
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+      - name: Install pinned dependencies
+        run: python -m pip install --disable-pip-version-check -r requirements.txt
+      - name: Verify dependency consistency
+        run: python -m pip check
+      - name: Run safe backend suite
+        run: >-
+          python -m pytest tests -q
+          --ignore=tests/test_pre_production_gate.py
+          --ignore=tests/test_postgres_api.py
+
+  postgres-integration:
+    name: PostgreSQL integration
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:17.11
+        env:
+          POSTGRES_DB: marketmitra_ci
+          POSTGRES_USER: marketmitra_ci
+          POSTGRES_PASSWORD: ci_only_password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U marketmitra_ci -d marketmitra_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    defaults:
+      run:
+        working-directory: backend
+    env:
+      DATABASE_URL: postgresql://marketmitra_ci:ci_only_password@127.0.0.1:5432/marketmitra_ci
+      MARKETMITRA_CONFIRM_DISPOSABLE: marketmitra_ci
+      MARKET_DATA_SOURCE: postgres
+      LIVE_MARKET_ENABLED: "false"
+      PYTHONDONTWRITEBYTECODE: "1"
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version-file: backend/.python-version
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+      - name: Install pinned dependencies
+        run: python -m pip install --disable-pip-version-check -r requirements.txt
+      - name: Verify disposable database target
+        run: python -c "from tests.postgres_ci import require_disposable_ci_database; print(require_disposable_ci_database())"
+      - name: Apply Alembic migrations
+        run: python -m alembic upgrade head
+      - name: Verify migrations created the ORM schema
+        run: |
+          python - <<'PY'
+          from sqlalchemy import create_engine, inspect
+          from app.core.config import get_database_url
+          from app.db.base import Base
+          import app.db.models  # noqa: F401
+
+          engine = create_engine(get_database_url())
+          try:
+              actual = set(inspect(engine).get_table_names())
+              missing = set(Base.metadata.tables) - actual
+              if missing:
+                  raise SystemExit(f"Migrations did not create tables: {sorted(missing)}")
+          finally:
+              engine.dispose()
+          PY
+      - name: Seed deterministic mock data
+        run: python -m app.scripts.seed_market_data
+      - name: Run isolated PostgreSQL API tests
+        run: python -m pytest tests/test_postgres_api.py -q
+
+  frontend:
+    name: Frontend verification
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Audit production and development dependencies
+        run: npm audit --audit-level=high
+      - name: Run Vitest suite
+        run: npm test
+      - name: Run lint
+        run: npm run lint
+      - name: Type-check application
+        run: npm run typecheck:app
+      - name: Type-check tooling
+        run: npm run typecheck:tooling
+      - name: Type-check tests
+        run: npm run typecheck:test
+      - name: Build production frontend
+        run: npm run build

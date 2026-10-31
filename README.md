@@ -34,7 +34,7 @@ Instruments are classified as equity, promoter share, debenture, mutual fund, go
 
 ## Installation
 
-Requirements: Python 3.14 or a compatible supported Python version, Node.js compatible with the installed Vite release, npm, and PostgreSQL for the PostgreSQL provider.
+Requirements: Python 3.14, Node.js 24, npm, and PostgreSQL for the PostgreSQL provider.
 
 ```bash
 cd backend
@@ -97,12 +97,21 @@ The development interface is served at the Vite URL shown in the terminal.
 
 ```bash
 cd backend
-python -m pytest
+python -m pytest tests --ignore=tests/test_pre_production_gate.py --ignore=tests/test_postgres_api.py
 
 cd ../frontend
+npm ci
+npm test
 npm run lint
+npm run typecheck:app
+npm run typecheck:tooling
+npm run typecheck:test
 npm run build
 ```
+
+The excluded backend files require an explicitly confirmed disposable
+PostgreSQL database. GitHub Actions provisions and seeds that database in a
+separate integration job; safe local tests never connect to it implicitly.
 
 ## Project structure
 
