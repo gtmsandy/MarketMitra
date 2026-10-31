@@ -45,6 +45,28 @@ captured or logged. Listener removal has its own regression test.
 | Losers, all rows negative | 4 | 7 | 22 | `N + 2` |
 | Most active | 4 | 7 | 22 | `N + 2` |
 
+## Milestone 7B result
+
+Stock listing and search now use one set-based query joining every instrument
+that has a price to its latest valid daily-price observation, followed by the
+existing latest-snapshot lookup. The same deterministic SQLite fixtures measure:
+
+| Path | 2 instruments | 5 instruments | 20 instruments | Result |
+| --- | ---: | ---: | ---: | --- |
+| Stock list | 2 | 2 | 2 | Kept |
+| Stock search matching all rows | 2 | 2 | 2 | Kept |
+
+This eliminates 2, 5, and 20 per-symbol latest-price statements respectively
+at those fixture sizes. Correctness contracts preserve symbol ordering,
+case-insensitive partial search, whitespace trimming, literal `%` and `_`
+matching, inclusion of non-equities with valid prices, omission of instruments
+without valid prices, latest-valid selection, and snapshot-derived timestamps.
+
+PostgreSQL latency and plan improvement remain unmeasured until the isolated
+benchmark environment described below is available. The change is retained on
+the independently reproducible query-count reduction and green equivalence
+contracts; it makes no claim about PostgreSQL wall-clock improvement.
+
 Serialized provider-result sizes also grew linearly:
 
 | Path | 2 rows | 5 rows | 20 rows |

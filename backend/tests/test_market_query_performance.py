@@ -1,9 +1,8 @@
 """SQLite query-count baselines for PostgreSQL-backed market provider paths.
 
-These passing tests intentionally describe current query growth. They are
-diagnostic contracts for Milestone 7A, not endorsements of the N+1 behavior.
-Milestone 7B should replace the linear-growth assertions with constant-query
-budgets while preserving the result assertions.
+Stock listing and search enforce the Milestone 7B constant-query budget. The
+remaining mover tests intentionally describe current query growth; they are
+diagnostic contracts, not endorsements of that N+1 behavior.
 """
 
 from collections.abc import Callable
@@ -95,13 +94,33 @@ def _measure_provider_call(
     [
         ("stock list", 1.0, lambda provider: provider.get_stocks()),
         ("stock search", 1.0, lambda provider: provider.search_stocks("Company")),
+    ],
+    ids=lambda value: value if isinstance(value, str) else None,
+)
+def test_stock_query_count_is_constant(
+    name: str,
+    change_percent: float,
+    call: ProviderCall,
+) -> None:
+    measurements = [
+        _measure_provider_call(size, change_percent, call)
+        for size in (2, 5, 20)
+    ]
+
+    assert [len(result) for _, result in measurements] == [2, 5, 20], name
+    assert {count for count, _ in measurements} == {2}, name
+
+
+@pytest.mark.parametrize(
+    ("name", "change_percent", "call"),
+    [
         ("gainers", 1.0, lambda provider: provider.get_top_gainers()),
         ("losers", -1.0, lambda provider: provider.get_top_losers()),
         ("most active", 1.0, lambda provider: provider.get_most_active()),
     ],
     ids=lambda value: value if isinstance(value, str) else None,
 )
-def test_market_query_counts_grow_with_instrument_count(
+def test_market_mover_query_counts_grow_with_instrument_count(
     name: str,
     change_percent: float,
     call: ProviderCall,

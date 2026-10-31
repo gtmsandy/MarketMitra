@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Literal
 
-from sqlalchemy import text
+from sqlalchemy import and_, func, or_, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -66,6 +66,12 @@ class DailyPriceRepository(ABC):
     @abstractmethod
     def get_latest_by_symbol(self, symbol: str) -> DailyPrice | None:
         """Return the most recent price row for a symbol, or None."""
+
+    @abstractmethod
+    def get_latest_instrument_prices(
+        self, search_term: str | None = None
+    ) -> list[tuple[Instrument, DailyPrice]]:
+        """Return instruments joined to their latest valid price, sorted by symbol."""
 
     @abstractmethod
     def get_intraday_by_symbol(self, symbol: str) -> list[LiveQuote]:
@@ -190,6 +196,42 @@ class PostgresDailyPriceRepository(DailyPriceRepository):
             .order_by(DailyPrice.date.desc())
             .first()
         )
+
+    def get_latest_instrument_prices(
+        self, search_term: str | None = None
+    ) -> list[tuple[Instrument, DailyPrice]]:
+        latest_valid_dates = (
+            self._session.query(
+                DailyPrice.symbol.label("symbol"),
+                func.max(DailyPrice.date).label("date"),
+            )
+            .filter(DailyPrice.is_ohlc_valid.is_(True))
+            .group_by(DailyPrice.symbol)
+            .subquery()
+        )
+        query = (
+            self._session.query(Instrument, DailyPrice)
+            .join(latest_valid_dates, latest_valid_dates.c.symbol == Instrument.symbol)
+            .join(
+                DailyPrice,
+                and_(
+                    DailyPrice.symbol == latest_valid_dates.c.symbol,
+                    DailyPrice.date == latest_valid_dates.c.date,
+                    DailyPrice.is_ohlc_valid.is_(True),
+                ),
+            )
+        )
+        if search_term:
+            term = search_term.lower()
+            query = query.filter(
+                or_(
+                    func.lower(Instrument.symbol).contains(term, autoescape=True),
+                    func.lower(Instrument.company_name).contains(
+                        term, autoescape=True
+                    ),
+                )
+            )
+        return query.order_by(Instrument.symbol.asc()).all()
 
     def get_intraday_by_symbol(self, symbol: str) -> list[LiveQuote]:
         return (

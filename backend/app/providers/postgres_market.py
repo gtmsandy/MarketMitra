@@ -97,28 +97,24 @@ class PostgresMarketProvider(MarketDataProvider):
     # ------------------------------------------------------------------
 
     def get_stocks(self) -> list[StockQuote]:
-        instruments = self._instruments.get_all()
+        return self._get_stock_quotes()
+
+    def _get_stock_quotes(self, search_term: str | None = None) -> list[StockQuote]:
+        instrument_prices = self._prices.get_latest_instrument_prices(search_term)
         latest_snapshot = self._snapshots.get_latest()
         snapshot_timestamp = (
             latest_snapshot.captured_at if latest_snapshot is not None else None
         )
-        quotes = []
-        for instrument in instruments:
-            price = self._prices.get_latest_by_symbol(instrument.symbol)
-            if price is None:
-                continue
-            quotes.append(self._to_stock_quote(instrument, price, snapshot_timestamp))
-        return quotes
+        return [
+            self._to_stock_quote(instrument, price, snapshot_timestamp)
+            for instrument, price in instrument_prices
+        ]
 
     def search_stocks(self, query: str) -> list[StockQuote]:
         if not query or not query.strip():
             return self.get_stocks()
         term = query.strip().lower()
-        all_quotes = self.get_stocks()
-        return [
-            q for q in all_quotes
-            if term in q.symbol.lower() or term in q.company_name.lower()
-        ]
+        return self._get_stock_quotes(term)
 
     # ------------------------------------------------------------------
     # Stock detail and history

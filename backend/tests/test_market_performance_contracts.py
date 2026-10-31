@@ -21,6 +21,88 @@ def test_stock_search_normalizes_whitespace_case_and_partial_company_name() -> N
         engine.dispose()
 
 
+def test_stock_search_treats_sql_wildcards_as_literal_characters() -> None:
+    engine, session = _make_market(1, 1.0)
+    try:
+        session.add_all(
+            [
+                Instrument(
+                    symbol="PCT%01", company_name="Percent Company",
+                    sector="Banking", security_type="EQUITY",
+                    created_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+                ),
+                Instrument(
+                    symbol="UNDER_01", company_name="Underscore Company",
+                    sector="Banking", security_type="EQUITY",
+                    created_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+                ),
+                DailyPrice(
+                    symbol="PCT%01", date="2026-09-03", open=100.0,
+                    high=102.0, low=99.0, close=101.0, volume=1_000,
+                    turnover=101_000.0, change=1.0, change_percent=1.0,
+                    previous_close=100.0, is_ohlc_valid=True,
+                ),
+                DailyPrice(
+                    symbol="UNDER_01", date="2026-09-03", open=100.0,
+                    high=102.0, low=99.0, close=101.0, volume=1_000,
+                    turnover=101_000.0, change=1.0, change_percent=1.0,
+                    previous_close=100.0, is_ohlc_valid=True,
+                ),
+            ]
+        )
+        session.commit()
+        provider = PostgresMarketProvider(session)
+
+        assert [row.symbol for row in provider.search_stocks("%")] == ["PCT%01"]
+        assert [row.symbol for row in provider.search_stocks("_")] == ["UNDER_01"]
+    finally:
+        session.close()
+        engine.dispose()
+
+
+def test_stock_list_preserves_universe_and_latest_valid_per_symbol() -> None:
+    engine, session = _make_market(1, 1.0)
+    try:
+        session.add_all(
+            [
+                Instrument(
+                    symbol="MISSING", company_name="Missing Observation",
+                    sector="Banking", security_type="EQUITY",
+                    created_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+                ),
+                Instrument(
+                    symbol="FUND001", company_name="Non-equity Fund",
+                    sector="Mutual Fund", security_type="MUTUAL_FUND",
+                    created_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+                ),
+                DailyPrice(
+                    symbol="FUND001", date="2026-09-02", open=100.0,
+                    high=102.0, low=99.0, close=101.0, volume=1_000,
+                    turnover=101_000.0, change=1.0, change_percent=1.0,
+                    previous_close=100.0, is_ohlc_valid=True,
+                ),
+                DailyPrice(
+                    symbol="SYM000", date="2026-09-04", open=100.0,
+                    high=90.0, low=99.0, close=101.0, volume=1_000,
+                    turnover=101_000.0, change=1.0, change_percent=1.0,
+                    previous_close=100.0, is_ohlc_valid=False,
+                    validation_reason="ohlc_ordering",
+                ),
+            ]
+        )
+        session.commit()
+
+        rows = PostgresMarketProvider(session).get_stocks()
+
+        assert [row.symbol for row in rows] == ["FUND001", "SYM000"]
+        assert [row.stock_observation_date for row in rows] == [
+            "2026-09-02", "2026-09-03"
+        ]
+    finally:
+        session.close()
+        engine.dispose()
+
+
 def test_market_mover_ties_have_stable_turnover_then_symbol_order() -> None:
     engine, session = _make_market(5, 1.0)
     try:
