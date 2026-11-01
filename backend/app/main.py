@@ -2,10 +2,18 @@ from contextlib import asynccontextmanager
 import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from app.api.router import api_router
-from app.core.config import get_cors_origins, validate_runtime_config
-from app.core.config import get_database_url, get_live_market_poll_interval, is_live_market_enabled
+from app.core.config import (
+    get_application_environment,
+    get_cors_origins,
+    get_database_url,
+    get_live_market_poll_interval,
+    is_live_market_enabled,
+    validate_runtime_config,
+)
+from app.identity.access import IdentityAccessError, SESSION_COOKIE_NAME
 from app.security import RuntimeSecurityMiddleware
 
 
@@ -32,6 +40,23 @@ async def lifespan(_: FastAPI):
 
 
 app = FastAPI(title="MarketMitra API", lifespan=lifespan)
+
+
+@app.exception_handler(IdentityAccessError)
+async def identity_access_error_handler(_, exc: IdentityAccessError) -> JSONResponse:
+    response = JSONResponse(
+        status_code=exc.status_code,
+        content={"error": {"code": exc.code, "message": exc.message}},
+    )
+    if exc.status_code == 401:
+        response.delete_cookie(
+            SESSION_COOKIE_NAME,
+            path="/api/v1",
+            httponly=True,
+            secure=get_application_environment() == "production",
+            samesite="lax",
+        )
+    return response
 
 app.add_middleware(RuntimeSecurityMiddleware)
 

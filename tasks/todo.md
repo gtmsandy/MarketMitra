@@ -20,7 +20,7 @@
 
 ## Checkpoint 4 — Authorization and administration
 
-- [ ] Current-user and require-admin dependencies.
+- [x] Current-user and require-admin dependencies.
 - [ ] Profile update and controlled offline admin provisioning.
 - [ ] Append-only, allowlisted security audit verification.
 

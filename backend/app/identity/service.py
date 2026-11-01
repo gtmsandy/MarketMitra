@@ -282,3 +282,16 @@ def logout_all_sessions(session: Session, grant: SessionGrant) -> None:
         actor_user=grant.user,
         identity_session=grant.session,
     )
+
+
+def update_profile(session: Session, grant: SessionGrant, display_name: str) -> User:
+    grant.user.display_name = display_name
+    grant.user.updated_at = _now()
+    _audit(
+        session,
+        "IDENTITY_PROFILE_UPDATED",
+        "SUCCESS",
+        actor_user=grant.user,
+        identity_session=grant.session,
+    )
+    return grant.user

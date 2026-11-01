@@ -9,6 +9,7 @@ from app.core.config import (
     get_auth_rate_limit,
     get_cors_origins,
 )
+from app.identity.access import AdminIdentity, CurrentIdentity, SESSION_COOKIE_NAME
 from app.identity.service import (
     RegistrationUnavailable,
     SessionGrant,
@@ -19,6 +20,7 @@ from app.identity.service import (
     register_identity,
     resolve_session,
     rotate_session,
+    update_profile,
 )
 from app.models.identity import (
     AuthSessionResponse,
@@ -26,23 +28,27 @@ from app.models.identity import (
     IdentityUserResponse,
     LoginRequest,
     RegisterRequest,
+    UpdateProfileRequest,
 )
 from app.security import auth_rate_limiter
 
 router = APIRouter(prefix="/auth", tags=["auth"])
-_COOKIE_NAME = "marketmitra_session"
 _COOKIE_MAX_AGE_SECONDS = 12 * 60 * 60
+
+
+def _user_response(grant: SessionGrant) -> IdentityUserResponse:
+    return IdentityUserResponse(
+        id=grant.user.id,
+        email=grant.user.email,
+        display_name=grant.user.display_name,
+        role=grant.user.role,
+        created_at=grant.user.created_at,
+    )
 
 
 def _response(grant: SessionGrant) -> AuthSessionResponse:
     return AuthSessionResponse(
-        user=IdentityUserResponse(
-            id=grant.user.id,
-            email=grant.user.email,
-            display_name=grant.user.display_name,
-            role=grant.user.role,
-            created_at=grant.user.created_at,
-        ),
+        user=_user_response(grant),
         csrf_token=grant.csrf_token,
         expires_at=grant.session.absolute_expires_at,
     )
@@ -50,7 +56,7 @@ def _response(grant: SessionGrant) -> AuthSessionResponse:
 
 def _set_session_cookie(response: Response, grant: SessionGrant) -> None:
     response.set_cookie(
-        key=_COOKIE_NAME,
+        key=SESSION_COOKIE_NAME,
         value=grant.session_token,
         max_age=_COOKIE_MAX_AGE_SECONDS,
         httponly=True,
@@ -62,7 +68,7 @@ def _set_session_cookie(response: Response, grant: SessionGrant) -> None:
 
 def _clear_session_cookie(response: Response) -> None:
     response.delete_cookie(
-        key=_COOKIE_NAME,
+        key=SESSION_COOKIE_NAME,
         httponly=True,
         secure=get_application_environment() == "production",
         samesite="lax",
@@ -165,7 +171,7 @@ def current_session(
 ) -> AuthSessionResponse | JSONResponse:
     grant = resolve_session(
         session,
-        request.cookies.get(_COOKIE_NAME),
+        request.cookies.get(SESSION_COOKIE_NAME),
         rotate_csrf=False,
     )
     if grant is None:
@@ -189,7 +195,7 @@ def _authenticated_mutation(
 ) -> SessionGrant | JSONResponse:
     grant = resolve_session(
         session,
-        request.cookies.get(_COOKIE_NAME),
+        request.cookies.get(SESSION_COOKIE_NAME),
         rotate_csrf=False,
     )
     if grant is None:
@@ -246,3 +252,33 @@ def logout_all(request: Request, session: IdentitySession) -> Response:
     response = Response(status_code=status.HTTP_204_NO_CONTENT)
     _clear_session_cookie(response)
     return response
+
+
+@router.get("/profile", response_model=IdentityUserResponse)
+def profile(identity: CurrentIdentity) -> IdentityUserResponse:
+    return _user_response(identity)
+
+
+@router.patch(
+    "/profile",
+    response_model=IdentityUserResponse,
+    responses={401: {"model": ErrorResponse}, 403: {"model": ErrorResponse}},
+)
+def update_own_profile(
+    request: Request,
+    payload: UpdateProfileRequest,
+    session: IdentitySession,
+) -> IdentityUserResponse | JSONResponse:
+    grant = _authenticated_mutation(request, session)
+    if isinstance(grant, JSONResponse):
+        if grant.status_code == status.HTTP_401_UNAUTHORIZED:
+            _clear_session_cookie(grant)
+        return grant
+    update_profile(session, grant, payload.display_name)
+    session.commit()
+    return _user_response(grant)
+
+
+@router.get("/admin", response_model=IdentityUserResponse)
+def admin_identity(identity: AdminIdentity) -> IdentityUserResponse:
+    return _user_response(identity)

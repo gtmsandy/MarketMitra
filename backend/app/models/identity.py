@@ -19,6 +19,15 @@ def normalize_email(value: str) -> str:
     return normalized
 
 
+def normalize_display_name(value: str) -> str:
+    normalized = " ".join(value.split())
+    if not normalized:
+        raise ValueError("Display name is required")
+    if any(unicodedata.category(character).startswith("C") for character in normalized):
+        raise ValueError("Display name contains unsupported characters")
+    return normalized
+
+
 class RegisterRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -34,12 +43,7 @@ class RegisterRequest(BaseModel):
     @field_validator("display_name")
     @classmethod
     def validate_display_name(cls, value: str) -> str:
-        normalized = " ".join(value.split())
-        if not normalized:
-            raise ValueError("Display name is required")
-        if any(unicodedata.category(character).startswith("C") for character in normalized):
-            raise ValueError("Display name contains unsupported characters")
-        return normalized
+        return normalize_display_name(value)
 
     @field_validator("password")
     @classmethod
@@ -65,6 +69,17 @@ class LoginRequest(BaseModel):
         if len(value.encode("utf-8")) > 128:
             raise ValueError("Password must be at most 128 bytes")
         return value
+
+
+class UpdateProfileRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    display_name: str = Field(min_length=1, max_length=80)
+
+    @field_validator("display_name")
+    @classmethod
+    def validate_display_name(cls, value: str) -> str:
+        return normalize_display_name(value)
 
 
 class IdentityUserResponse(BaseModel):

@@ -34,11 +34,16 @@ def identity_session_factory() -> Generator[sessionmaker[Session], None, None]:
 @pytest.fixture
 def identity_client(
     identity_session_factory: sessionmaker[Session],
+    monkeypatch: pytest.MonkeyPatch,
 ) -> Generator[TestClient, None, None]:
+    from app.api.dependencies import _get_source
+
     def override_session() -> Generator[Session, None, None]:
         with identity_session_factory() as session:
             yield session
 
+    monkeypatch.setenv("MARKET_DATA_SOURCE", "mock")
+    _get_source.cache_clear()
     auth_rate_limiter.clear()
     app.dependency_overrides[get_identity_session] = override_session
     try:
@@ -47,6 +52,7 @@ def identity_client(
     finally:
         app.dependency_overrides.pop(get_identity_session, None)
         auth_rate_limiter.clear()
+        _get_source.cache_clear()
 
 
 def test_register_creates_user_hashed_credentials_and_audit_event(
@@ -468,3 +474,101 @@ def test_logout_all_revokes_every_active_session(
         reasons = [stored.revocation_reason for stored in sessions]
         assert reasons.count("ROTATED") == 1
         assert reasons.count("USER_LOGOUT_ALL") == 2
+
+
+def test_profile_requires_a_valid_server_side_session(
+    identity_client: TestClient,
+) -> None:
+    response = identity_client.get("/api/v1/auth/profile")
+
+    assert response.status_code == 401
+    assert response.json() == {
+        "error": {
+            "code": "AUTHENTICATION_REQUIRED",
+            "message": "Authentication is required",
+        }
+    }
+
+
+def test_profile_update_requires_csrf_and_cannot_change_role(
+    identity_client: TestClient,
+    identity_session_factory: sessionmaker[Session],
+) -> None:
+    registration = identity_client.post(
+        "/api/v1/auth/register",
+        json={
+            "email": "investor@example.com",
+            "display_name": "Investor",
+            "password": "correct horse battery staple",
+        },
+    )
+    csrf_token = registration.json()["csrf_token"]
+
+    rejected = identity_client.patch(
+        "/api/v1/auth/profile", json={"display_name": "Updated Investor"}
+    )
+    role_change = identity_client.patch(
+        "/api/v1/auth/profile",
+        json={"display_name": "Updated Investor", "role": "ADMIN"},
+        headers={
+            "Origin": "http://localhost:5173",
+            "X-CSRF-Token": csrf_token,
+        },
+    )
+    accepted = identity_client.patch(
+        "/api/v1/auth/profile",
+        json={"display_name": "  Updated   Investor  "},
+        headers={
+            "Origin": "http://localhost:5173",
+            "X-CSRF-Token": csrf_token,
+        },
+    )
+
+    assert rejected.status_code == 403
+    assert role_change.status_code == 422
+    assert accepted.status_code == 200
+    assert accepted.json()["display_name"] == "Updated Investor"
+    assert accepted.json()["role"] == "USER"
+    with identity_session_factory() as session:
+        user = session.scalar(select(User))
+        assert user is not None
+        assert user.display_name == "Updated Investor"
+        event_types = session.scalars(
+            select(SecurityAuditEvent.event_type).order_by(SecurityAuditEvent.id)
+        ).all()
+        assert "IDENTITY_PROFILE_UPDATED" in event_types
+
+
+def test_require_admin_denies_user_and_accepts_database_admin_role(
+    identity_client: TestClient,
+    identity_session_factory: sessionmaker[Session],
+) -> None:
+    identity_client.post(
+        "/api/v1/auth/register",
+        json={
+            "email": "investor@example.com",
+            "display_name": "Investor",
+            "password": "correct horse battery staple",
+        },
+    )
+
+    denied = identity_client.get("/api/v1/auth/admin")
+    with identity_session_factory() as session:
+        user = session.scalar(select(User))
+        assert user is not None
+        user.role = "ADMIN"
+        session.commit()
+    accepted = identity_client.get("/api/v1/auth/admin")
+
+    assert denied.status_code == 403
+    assert denied.json()["error"]["code"] == "ADMIN_REQUIRED"
+    assert accepted.status_code == 200
+    assert accepted.json()["role"] == "ADMIN"
+
+
+def test_public_market_analytics_remain_anonymous(
+    identity_client: TestClient,
+) -> None:
+    response = identity_client.get("/api/v1/market/overview")
+
+    assert response.status_code == 200
