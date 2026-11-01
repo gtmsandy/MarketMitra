@@ -66,4 +66,8 @@ def digest_secret(secret: str) -> bytes:
 
 
 def verifier_matches(expected_verifier: bytes, candidate_secret: str) -> bool:
-    return hmac.compare_digest(expected_verifier, digest_secret(candidate_secret))
+    try:
+        candidate_verifier = digest_secret(candidate_secret)
+    except UnicodeEncodeError:
+        return False
+    return hmac.compare_digest(expected_verifier, candidate_verifier)

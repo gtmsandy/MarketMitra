@@ -1,15 +1,19 @@
 """Public registration and login routes for opaque cookie sessions."""
 
-from fastapi import APIRouter, Response, status
+from fastapi import APIRouter, Request, Response, status
 from fastapi.responses import JSONResponse
 
 from app.api.dependencies import IdentitySession
-from app.core.config import get_application_environment
+from app.core.config import get_application_environment, get_cors_origins
 from app.identity.service import (
     RegistrationUnavailable,
     SessionGrant,
     authenticate_identity,
+    csrf_matches,
+    logout_all_sessions,
+    logout_session,
     register_identity,
+    resolve_session,
 )
 from app.models.identity import (
     AuthSessionResponse,
@@ -43,6 +47,16 @@ def _set_session_cookie(response: Response, grant: SessionGrant) -> None:
         key=_COOKIE_NAME,
         value=grant.session_token,
         max_age=_COOKIE_MAX_AGE_SECONDS,
+        httponly=True,
+        secure=get_application_environment() == "production",
+        samesite="lax",
+        path="/api/v1",
+    )
+
+
+def _clear_session_cookie(response: Response) -> None:
+    response.delete_cookie(
+        key=_COOKIE_NAME,
         httponly=True,
         secure=get_application_environment() == "production",
         samesite="lax",
@@ -105,3 +119,93 @@ def login(
 
     _set_session_cookie(response, grant)
     return _response(grant)
+
+
+@router.get(
+    "/session",
+    response_model=AuthSessionResponse,
+    responses={401: {"model": ErrorResponse}},
+)
+def current_session(
+    request: Request, response: Response, session: IdentitySession
+) -> AuthSessionResponse | JSONResponse:
+    grant = resolve_session(
+        session,
+        request.cookies.get(_COOKIE_NAME),
+        rotate_csrf=True,
+    )
+    session.commit()
+    if grant is None:
+        error = _error(
+            status.HTTP_401_UNAUTHORIZED,
+            "AUTHENTICATION_REQUIRED",
+            "Authentication is required",
+        )
+        _clear_session_cookie(error)
+        return error
+    response.headers["Cache-Control"] = "no-store"
+    return _response(grant)
+
+
+def _authenticated_mutation(
+    request: Request, session: IdentitySession
+) -> SessionGrant | JSONResponse:
+    grant = resolve_session(
+        session,
+        request.cookies.get(_COOKIE_NAME),
+        rotate_csrf=False,
+    )
+    if grant is None:
+        session.commit()
+        return _error(
+            status.HTTP_401_UNAUTHORIZED,
+            "AUTHENTICATION_REQUIRED",
+            "Authentication is required",
+        )
+
+    origin = request.headers.get("origin")
+    csrf_token = request.headers.get("x-csrf-token")
+    if origin not in get_cors_origins() or not csrf_matches(grant.session, csrf_token):
+        session.rollback()
+        return _error(
+            status.HTTP_403_FORBIDDEN,
+            "CSRF_VALIDATION_FAILED",
+            "Request could not be verified",
+        )
+    return grant
+
+
+@router.post(
+    "/logout",
+    status_code=status.HTTP_204_NO_CONTENT,
+    responses={401: {"model": ErrorResponse}, 403: {"model": ErrorResponse}},
+)
+def logout(request: Request, session: IdentitySession) -> Response:
+    grant = _authenticated_mutation(request, session)
+    if isinstance(grant, JSONResponse):
+        if grant.status_code == status.HTTP_401_UNAUTHORIZED:
+            _clear_session_cookie(grant)
+        return grant
+    logout_session(session, grant)
+    session.commit()
+    response = Response(status_code=status.HTTP_204_NO_CONTENT)
+    _clear_session_cookie(response)
+    return response
+
+
+@router.post(
+    "/logout-all",
+    status_code=status.HTTP_204_NO_CONTENT,
+    responses={401: {"model": ErrorResponse}, 403: {"model": ErrorResponse}},
+)
+def logout_all(request: Request, session: IdentitySession) -> Response:
+    grant = _authenticated_mutation(request, session)
+    if isinstance(grant, JSONResponse):
+        if grant.status_code == status.HTTP_401_UNAUTHORIZED:
+            _clear_session_cookie(grant)
+        return grant
+    logout_all_sessions(session, grant)
+    session.commit()
+    response = Response(status_code=status.HTTP_204_NO_CONTENT)
+    _clear_session_cookie(response)
+    return response

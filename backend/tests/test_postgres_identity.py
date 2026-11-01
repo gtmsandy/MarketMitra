@@ -7,6 +7,8 @@ from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.exc import DBAPIError
 
 from app.core.config import get_database_url
+from app.db.base import make_session_factory
+from app.identity.service import register_identity, resolve_session
 from tests.postgres_ci import require_disposable_ci_database
 
 
@@ -58,3 +60,23 @@ def test_security_audit_events_reject_updates() -> None:
     finally:
         connection.close()
         engine.dispose()
+
+
+def test_identity_session_lifecycle_uses_postgresql_constraints() -> None:
+    factory = make_session_factory(get_database_url())
+    email = f"identity-{uuid4()}@example.com"
+    with factory.begin() as session:
+        grant = register_identity(
+            session,
+            email=email,
+            display_name="PostgreSQL Identity",
+            password="correct horse battery staple",
+        )
+        session_token = grant.session_token
+
+    with factory.begin() as session:
+        resolved = resolve_session(session, session_token, rotate_csrf=True)
+
+        assert resolved is not None
+        assert resolved.user.email == email
+        assert resolved.csrf_token

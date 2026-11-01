@@ -1,5 +1,5 @@
 from collections.abc import Generator
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import pytest
 from fastapi.testclient import TestClient
@@ -219,3 +219,194 @@ def test_auth_cors_preflight_allows_only_configured_credentialed_origin(
     assert response.headers["access-control-allow-credentials"] == "true"
     assert "POST" in response.headers["access-control-allow-methods"]
     assert "x-csrf-token" in response.headers["access-control-allow-headers"].lower()
+
+
+def test_session_bootstrap_rotates_csrf_and_rejects_the_previous_token(
+    identity_client: TestClient,
+) -> None:
+    registration = identity_client.post(
+        "/api/v1/auth/register",
+        json={
+            "email": "investor@example.com",
+            "display_name": "Investor",
+            "password": "correct horse battery staple",
+        },
+    )
+    original_csrf = registration.json()["csrf_token"]
+
+    bootstrap = identity_client.get("/api/v1/auth/session")
+
+    assert bootstrap.status_code == 200
+    rotated_csrf = bootstrap.json()["csrf_token"]
+    assert rotated_csrf != original_csrf
+    rejected = identity_client.post(
+        "/api/v1/auth/logout",
+        headers={
+            "Origin": "http://localhost:5173",
+            "X-CSRF-Token": original_csrf,
+        },
+    )
+    assert rejected.status_code == 403
+    accepted = identity_client.post(
+        "/api/v1/auth/logout",
+        headers={
+            "Origin": "http://localhost:5173",
+            "X-CSRF-Token": rotated_csrf,
+        },
+    )
+    assert accepted.status_code == 204
+    assert "Max-Age=0" in accepted.headers["set-cookie"]
+
+
+@pytest.mark.parametrize(
+    "headers",
+    [
+        {"X-CSRF-Token": "invalid"},
+        {"Origin": "https://attacker.example", "X-CSRF-Token": "invalid"},
+        {"Origin": "http://localhost:5173", "X-CSRF-Token": "invalid"},
+    ],
+)
+def test_logout_uses_one_generic_csrf_failure(
+    identity_client: TestClient, headers: dict[str, str]
+) -> None:
+    identity_client.post(
+        "/api/v1/auth/register",
+        json={
+            "email": "investor@example.com",
+            "display_name": "Investor",
+            "password": "correct horse battery staple",
+        },
+    )
+
+    response = identity_client.post("/api/v1/auth/logout", headers=headers)
+
+    assert response.status_code == 403
+    assert response.json() == {
+        "error": {
+            "code": "CSRF_VALIDATION_FAILED",
+            "message": "Request could not be verified",
+        }
+    }
+
+
+def test_expired_session_is_revoked_and_cookie_is_cleared(
+    identity_client: TestClient,
+    identity_session_factory: sessionmaker[Session],
+) -> None:
+    identity_client.post(
+        "/api/v1/auth/register",
+        json={
+            "email": "investor@example.com",
+            "display_name": "Investor",
+            "password": "correct horse battery staple",
+        },
+    )
+    now = datetime.now(timezone.utc)
+    with identity_session_factory() as session:
+        stored = session.scalar(select(UserSession))
+        assert stored is not None
+        stored.created_at = now - timedelta(hours=2)
+        stored.last_activity_at = now - timedelta(hours=1)
+        stored.idle_expires_at = now - timedelta(seconds=1)
+        stored.absolute_expires_at = now + timedelta(hours=1)
+        session.commit()
+
+    response = identity_client.get("/api/v1/auth/session")
+
+    assert response.status_code == 401
+    assert "Max-Age=0" in response.headers["set-cookie"]
+    with identity_session_factory() as session:
+        stored = session.scalar(select(UserSession))
+        assert stored is not None
+        assert stored.revoked_at is not None
+        assert stored.revocation_reason == "IDLE_EXPIRED"
+
+
+def test_disabled_account_cannot_login_or_use_an_existing_session(
+    identity_client: TestClient,
+    identity_session_factory: sessionmaker[Session],
+) -> None:
+    credentials = {
+        "email": "investor@example.com",
+        "display_name": "Investor",
+        "password": "correct horse battery staple",
+    }
+    identity_client.post("/api/v1/auth/register", json=credentials)
+    with identity_session_factory() as session:
+        user = session.scalar(select(User))
+        assert user is not None
+        user.state = "DISABLED"
+        session.commit()
+
+    login = identity_client.post(
+        "/api/v1/auth/login",
+        json={"email": credentials["email"], "password": credentials["password"]},
+    )
+    bootstrap = identity_client.get("/api/v1/auth/session")
+
+    assert login.status_code == 401
+    assert login.json()["error"]["code"] == "AUTHENTICATION_FAILED"
+    assert bootstrap.status_code == 401
+    with identity_session_factory() as session:
+        sessions = session.scalars(select(UserSession)).all()
+        assert len(sessions) == 1
+        assert sessions[0].revocation_reason == "ACCOUNT_DISABLED"
+
+
+def test_sixth_active_session_revokes_the_oldest(
+    identity_client: TestClient,
+    identity_session_factory: sessionmaker[Session],
+) -> None:
+    credentials = {
+        "email": "investor@example.com",
+        "display_name": "Investor",
+        "password": "correct horse battery staple",
+    }
+    assert identity_client.post("/api/v1/auth/register", json=credentials).status_code == 201
+    for _ in range(5):
+        response = identity_client.post(
+            "/api/v1/auth/login",
+            json={"email": credentials["email"], "password": credentials["password"]},
+        )
+        assert response.status_code == 200
+
+    with identity_session_factory() as session:
+        sessions = session.scalars(
+            select(UserSession).order_by(UserSession.created_at)
+        ).all()
+
+    assert len(sessions) == 6
+    assert sum(stored.revoked_at is None for stored in sessions) == 5
+    assert sessions[0].revocation_reason == "SESSION_LIMIT"
+
+
+def test_logout_all_revokes_every_active_session(
+    identity_client: TestClient,
+    identity_session_factory: sessionmaker[Session],
+) -> None:
+    credentials = {
+        "email": "investor@example.com",
+        "display_name": "Investor",
+        "password": "correct horse battery staple",
+    }
+    registration = identity_client.post("/api/v1/auth/register", json=credentials)
+    identity_client.post(
+        "/api/v1/auth/login",
+        json={"email": credentials["email"], "password": credentials["password"]},
+    )
+    bootstrap = identity_client.get("/api/v1/auth/session")
+
+    response = identity_client.post(
+        "/api/v1/auth/logout-all",
+        headers={
+            "Origin": "http://localhost:5173",
+            "X-CSRF-Token": bootstrap.json()["csrf_token"],
+        },
+    )
+
+    assert registration.status_code == 201
+    assert response.status_code == 204
+    with identity_session_factory() as session:
+        sessions = session.scalars(select(UserSession)).all()
+        assert len(sessions) == 2
+        assert all(stored.revocation_reason == "USER_LOGOUT_ALL" for stored in sessions)

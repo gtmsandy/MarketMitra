@@ -57,3 +57,4 @@ def test_secret_verifier_is_fixed_length_and_constant_time_comparable() -> None:
     assert len(verifier) == 32
     assert verifier_matches(verifier, secret) is True
     assert verifier_matches(verifier, generate_secret()) is False
+    assert verifier_matches(verifier, "न") is False

@@ -15,7 +15,7 @@
 ## Checkpoint 3 — Authentication API
 
 - [x] Register and generic login.
-- [ ] Session bootstrap, CSRF retrieval, logout, and logout-all.
+- [x] Session bootstrap, CSRF retrieval, logout, and logout-all.
 - [ ] Expiry, rotation, revocation, five-session limit, disabled accounts, origin checks, and rate limits.
 
 ## Checkpoint 4 — Authorization and administration
