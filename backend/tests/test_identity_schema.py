@@ -1,7 +1,7 @@
 from sqlalchemy import CheckConstraint, LargeBinary, UniqueConstraint, create_engine, inspect
 
 from app.db.base import Base
-from app.db.models import SecurityAuditEvent, User, UserSession
+from app.db.models import SecurityAuditEvent, User, UserSession, Watchlist, WatchlistItem
 
 
 def test_identity_tables_create_with_expected_columns() -> None:
@@ -101,3 +101,23 @@ def test_audit_schema_contains_no_secret_or_password_fields() -> None:
     assert not columns.intersection(
         {"password", "password_hash", "token", "token_verifier", "csrf_token", "csrf_verifier"}
     )
+
+
+def test_watchlist_schema_enforces_owner_and_instrument_uniqueness() -> None:
+    watchlist_uniques = {
+        constraint.name
+        for constraint in Watchlist.__table__.constraints
+        if isinstance(constraint, UniqueConstraint)
+    }
+    item_uniques = {
+        constraint.name
+        for constraint in WatchlistItem.__table__.constraints
+        if isinstance(constraint, UniqueConstraint)
+    }
+    assert "uq_watchlists_owner_name" in watchlist_uniques
+    assert "uq_watchlist_items_watchlist_symbol" in item_uniques
+    assert "ck_watchlists_name_normalized" in {
+        constraint.name
+        for constraint in Watchlist.__table__.constraints
+        if isinstance(constraint, CheckConstraint)
+    }

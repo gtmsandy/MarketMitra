@@ -235,6 +235,22 @@ def test_auth_cors_preflight_allows_only_configured_credentialed_origin(
     assert "x-csrf-token" in response.headers["access-control-allow-headers"].lower()
 
 
+def test_auth_cors_preflight_allows_authenticated_delete_mutations(
+    identity_client: TestClient,
+) -> None:
+    response = identity_client.options(
+        "/api/v1/watchlists/example/items/SYNBANKA",
+        headers={
+            "Origin": "http://localhost:5173",
+            "Access-Control-Request-Method": "DELETE",
+            "Access-Control-Request-Headers": "x-csrf-token",
+        },
+    )
+
+    assert response.status_code == 200
+    assert "DELETE" in response.headers["access-control-allow-methods"]
+
+
 def test_session_bootstrap_rotates_csrf_and_rejects_the_previous_token(
     identity_client: TestClient,
     identity_session_factory: sessionmaker[Session],

@@ -182,6 +182,59 @@ class User(Base):
     )
 
 
+class Watchlist(Base):
+    """A private, user-owned collection of instruments."""
+
+    __tablename__ = "watchlists"
+
+    id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
+    owner_id: Mapped[UUID] = mapped_column(
+        Uuid, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    name: Mapped[str] = mapped_column(String(80), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=_utc_now
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=_utc_now, onupdate=_utc_now
+    )
+
+    owner: Mapped[User] = relationship("User")
+    items: Mapped[list["WatchlistItem"]] = relationship(
+        "WatchlistItem", back_populates="watchlist", cascade="all, delete-orphan"
+    )
+
+    __table_args__ = (
+        UniqueConstraint("owner_id", "name", name="uq_watchlists_owner_name"),
+        CheckConstraint("name = lower(trim(name))", name="ck_watchlists_name_normalized"),
+    )
+
+
+class WatchlistItem(Base):
+    """One instrument in a watchlist."""
+
+    __tablename__ = "watchlist_items"
+
+    id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
+    watchlist_id: Mapped[UUID] = mapped_column(
+        Uuid, ForeignKey("watchlists.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    symbol: Mapped[str] = mapped_column(
+        String, ForeignKey("instruments.symbol", ondelete="RESTRICT"), nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=_utc_now
+    )
+
+    watchlist: Mapped[Watchlist] = relationship("Watchlist", back_populates="items")
+    instrument: Mapped[Instrument] = relationship("Instrument")
+
+    __table_args__ = (
+        UniqueConstraint("watchlist_id", "symbol", name="uq_watchlist_items_watchlist_symbol"),
+        Index("ix_watchlist_items_watchlist_created", "watchlist_id", "created_at"),
+    )
+
+
 class UserSession(Base):
     """A revocable server-side session with hashed browser credentials."""
 
