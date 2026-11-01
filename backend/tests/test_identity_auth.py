@@ -12,6 +12,7 @@ from app.db.base import Base
 from app.db.models import SecurityAuditEvent, User, UserSession
 from app.identity.security import verifier_matches, verify_password
 from app.main import app
+from app.security import auth_rate_limiter
 
 
 @pytest.fixture
@@ -38,12 +39,14 @@ def identity_client(
         with identity_session_factory() as session:
             yield session
 
+    auth_rate_limiter.clear()
     app.dependency_overrides[get_identity_session] = override_session
     try:
         with TestClient(app) as test_client:
             yield test_client
     finally:
         app.dependency_overrides.pop(get_identity_session, None)
+        auth_rate_limiter.clear()
 
 
 def test_register_creates_user_hashed_credentials_and_audit_event(
@@ -223,6 +226,7 @@ def test_auth_cors_preflight_allows_only_configured_credentialed_origin(
 
 def test_session_bootstrap_rotates_csrf_and_rejects_the_previous_token(
     identity_client: TestClient,
+    identity_session_factory: sessionmaker[Session],
 ) -> None:
     registration = identity_client.post(
         "/api/v1/auth/register",
@@ -233,12 +237,32 @@ def test_session_bootstrap_rotates_csrf_and_rejects_the_previous_token(
         },
     )
     original_csrf = registration.json()["csrf_token"]
+    original_cookie = registration.cookies.get("marketmitra_session")
+    assert original_cookie
 
     bootstrap = identity_client.get("/api/v1/auth/session")
 
     assert bootstrap.status_code == 200
     rotated_csrf = bootstrap.json()["csrf_token"]
+    rotated_cookie = bootstrap.cookies.get("marketmitra_session")
+    assert rotated_cookie
+    assert rotated_cookie != original_cookie
     assert rotated_csrf != original_csrf
+    with identity_session_factory() as session:
+        sessions = session.scalars(
+            select(UserSession).order_by(UserSession.created_at)
+        ).all()
+        assert len(sessions) == 2
+        assert sessions[0].revocation_reason == "ROTATED"
+        assert sessions[1].rotation_predecessor_id == sessions[0].id
+
+    identity_client.cookies.set(
+        "marketmitra_session", original_cookie, path="/api/v1"
+    )
+    assert identity_client.get("/api/v1/auth/session").status_code == 401
+    identity_client.cookies.set(
+        "marketmitra_session", rotated_cookie, path="/api/v1"
+    )
     rejected = identity_client.post(
         "/api/v1/auth/logout",
         headers={
@@ -256,6 +280,28 @@ def test_session_bootstrap_rotates_csrf_and_rejects_the_previous_token(
     )
     assert accepted.status_code == 204
     assert "Max-Age=0" in accepted.headers["set-cookie"]
+
+
+def test_login_rate_limit_is_bounded_and_generic(
+    identity_client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("AUTH_RATE_LIMIT_REQUESTS", "2")
+    monkeypatch.setenv("AUTH_RATE_LIMIT_WINDOW_SECONDS", "900")
+    payload = {"email": "unknown@example.com", "password": "incorrect password value"}
+
+    first = identity_client.post("/api/v1/auth/login", json=payload)
+    second = identity_client.post("/api/v1/auth/login", json=payload)
+    limited = identity_client.post("/api/v1/auth/login", json=payload)
+
+    assert first.status_code == second.status_code == 401
+    assert limited.status_code == 429
+    assert limited.json() == {
+        "error": {
+            "code": "RATE_LIMITED",
+            "message": "Too many authentication attempts",
+        }
+    }
+    assert int(limited.headers["retry-after"]) > 0
 
 
 @pytest.mark.parametrize(
@@ -289,9 +335,19 @@ def test_logout_uses_one_generic_csrf_failure(
     }
 
 
+@pytest.mark.parametrize(
+    "idle_delta, absolute_delta, reason",
+    [
+        (timedelta(seconds=-1), timedelta(hours=1), "IDLE_EXPIRED"),
+        (timedelta(seconds=-2), timedelta(seconds=-1), "ABSOLUTE_EXPIRED"),
+    ],
+)
 def test_expired_session_is_revoked_and_cookie_is_cleared(
     identity_client: TestClient,
     identity_session_factory: sessionmaker[Session],
+    idle_delta: timedelta,
+    absolute_delta: timedelta,
+    reason: str,
 ) -> None:
     identity_client.post(
         "/api/v1/auth/register",
@@ -307,8 +363,8 @@ def test_expired_session_is_revoked_and_cookie_is_cleared(
         assert stored is not None
         stored.created_at = now - timedelta(hours=2)
         stored.last_activity_at = now - timedelta(hours=1)
-        stored.idle_expires_at = now - timedelta(seconds=1)
-        stored.absolute_expires_at = now + timedelta(hours=1)
+        stored.idle_expires_at = now + idle_delta
+        stored.absolute_expires_at = now + absolute_delta
         session.commit()
 
     response = identity_client.get("/api/v1/auth/session")
@@ -319,7 +375,7 @@ def test_expired_session_is_revoked_and_cookie_is_cleared(
         stored = session.scalar(select(UserSession))
         assert stored is not None
         assert stored.revoked_at is not None
-        assert stored.revocation_reason == "IDLE_EXPIRED"
+        assert stored.revocation_reason == reason
 
 
 def test_disabled_account_cannot_login_or_use_an_existing_session(
@@ -408,5 +464,7 @@ def test_logout_all_revokes_every_active_session(
     assert response.status_code == 204
     with identity_session_factory() as session:
         sessions = session.scalars(select(UserSession)).all()
-        assert len(sessions) == 2
-        assert all(stored.revocation_reason == "USER_LOGOUT_ALL" for stored in sessions)
+        assert len(sessions) == 3
+        reasons = [stored.revocation_reason for stored in sessions]
+        assert reasons.count("ROTATED") == 1
+        assert reasons.count("USER_LOGOUT_ALL") == 2

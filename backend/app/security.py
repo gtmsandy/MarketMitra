@@ -64,6 +64,8 @@ class InMemoryRateLimiter:
 
 
 http_rate_limiter = InMemoryRateLimiter()
+# shortcut: per-process auth limits are single-instance only; use a shared store before scaling out.
+auth_rate_limiter = InMemoryRateLimiter()
 
 
 def _hostname(host_header: str) -> str | None:

@@ -4,7 +4,11 @@ from fastapi import APIRouter, Request, Response, status
 from fastapi.responses import JSONResponse
 
 from app.api.dependencies import IdentitySession
-from app.core.config import get_application_environment, get_cors_origins
+from app.core.config import (
+    get_application_environment,
+    get_auth_rate_limit,
+    get_cors_origins,
+)
 from app.identity.service import (
     RegistrationUnavailable,
     SessionGrant,
@@ -14,6 +18,7 @@ from app.identity.service import (
     logout_session,
     register_identity,
     resolve_session,
+    rotate_session,
 )
 from app.models.identity import (
     AuthSessionResponse,
@@ -22,6 +27,7 @@ from app.models.identity import (
     LoginRequest,
     RegisterRequest,
 )
+from app.security import auth_rate_limiter
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 _COOKIE_NAME = "marketmitra_session"
@@ -69,6 +75,22 @@ def _error(status_code: int, code: str, message: str) -> JSONResponse:
     return JSONResponse(status_code=status_code, content=payload.model_dump())
 
 
+def _rate_limit(request: Request) -> JSONResponse | None:
+    limit, window, max_clients = get_auth_rate_limit()
+    client = request.client.host if request.client else "unknown"
+    key = f"{client}:{request.url.path}"
+    retry_after = auth_rate_limiter.check(key, limit, window, max_clients)
+    if retry_after is None:
+        return None
+    response = _error(
+        status.HTTP_429_TOO_MANY_REQUESTS,
+        "RATE_LIMITED",
+        "Too many authentication attempts",
+    )
+    response.headers["Retry-After"] = str(retry_after)
+    return response
+
+
 @router.post(
     "/register",
     response_model=AuthSessionResponse,
@@ -76,14 +98,20 @@ def _error(status_code: int, code: str, message: str) -> JSONResponse:
     responses={409: {"model": ErrorResponse}},
 )
 def register(
-    request: RegisterRequest, response: Response, session: IdentitySession
+    request: Request,
+    payload: RegisterRequest,
+    response: Response,
+    session: IdentitySession,
 ) -> AuthSessionResponse | JSONResponse:
+    limited = _rate_limit(request)
+    if limited is not None:
+        return limited
     try:
         grant = register_identity(
             session,
-            email=request.email,
-            display_name=request.display_name,
-            password=request.password,
+            email=payload.email,
+            display_name=payload.display_name,
+            password=payload.password,
         )
         session.commit()
     except RegistrationUnavailable:
@@ -104,10 +132,16 @@ def register(
     responses={401: {"model": ErrorResponse}},
 )
 def login(
-    request: LoginRequest, response: Response, session: IdentitySession
+    request: Request,
+    payload: LoginRequest,
+    response: Response,
+    session: IdentitySession,
 ) -> AuthSessionResponse | JSONResponse:
+    limited = _rate_limit(request)
+    if limited is not None:
+        return limited
     grant = authenticate_identity(
-        session, email=request.email, password=request.password
+        session, email=payload.email, password=payload.password
     )
     session.commit()
     if grant is None:
@@ -132,10 +166,10 @@ def current_session(
     grant = resolve_session(
         session,
         request.cookies.get(_COOKIE_NAME),
-        rotate_csrf=True,
+        rotate_csrf=False,
     )
-    session.commit()
     if grant is None:
+        session.commit()
         error = _error(
             status.HTTP_401_UNAUTHORIZED,
             "AUTHENTICATION_REQUIRED",
@@ -143,6 +177,9 @@ def current_session(
         )
         _clear_session_cookie(error)
         return error
+    grant = rotate_session(session, grant)
+    session.commit()
+    _set_session_cookie(response, grant)
     response.headers["Cache-Control"] = "no-store"
     return _response(grant)
 

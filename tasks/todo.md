@@ -16,7 +16,7 @@
 
 - [x] Register and generic login.
 - [x] Session bootstrap, CSRF retrieval, logout, and logout-all.
-- [ ] Expiry, rotation, revocation, five-session limit, disabled accounts, origin checks, and rate limits.
+- [x] Expiry, rotation, revocation, five-session limit, disabled accounts, origin checks, and rate limits.
 
 ## Checkpoint 4 — Authorization and administration
 

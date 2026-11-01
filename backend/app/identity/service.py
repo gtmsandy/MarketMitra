@@ -179,7 +179,7 @@ def resolve_session(
     identity_session = session.scalar(
         select(UserSession).where(
             UserSession.token_verifier == token_verifier
-        )
+        ).with_for_update()
     )
     if identity_session is None or identity_session.revoked_at is not None:
         return None
@@ -214,6 +214,35 @@ def resolve_session(
     if rotate_csrf:
         identity_session.csrf_verifier = digest_secret(csrf_token)
     return SessionGrant(user, identity_session, session_token, csrf_token)
+
+
+def rotate_session(session: Session, grant: SessionGrant) -> SessionGrant:
+    # Reuse the validation timestamp so expiry cannot race the rotation write.
+    now = _as_utc(grant.session.last_activity_at)
+    _revoke(grant.session, now, "ROTATED")
+    session_token = generate_secret()
+    csrf_token = generate_secret()
+    absolute_expires_at = _as_utc(grant.session.absolute_expires_at)
+    successor = UserSession(
+        user=grant.user,
+        token_verifier=digest_secret(session_token),
+        csrf_verifier=digest_secret(csrf_token),
+        created_at=now,
+        last_activity_at=now,
+        idle_expires_at=min(now + SESSION_IDLE_DURATION, absolute_expires_at),
+        absolute_expires_at=absolute_expires_at,
+        rotation_predecessor_id=grant.session.id,
+    )
+    session.add(successor)
+    session.flush()
+    _audit(
+        session,
+        "SESSION_ROTATED",
+        "SUCCESS",
+        actor_user=grant.user,
+        identity_session=successor,
+    )
+    return SessionGrant(grant.user, successor, session_token, csrf_token)
 
 
 def csrf_matches(identity_session: UserSession, candidate: str | None) -> bool:

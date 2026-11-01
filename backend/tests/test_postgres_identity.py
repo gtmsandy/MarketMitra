@@ -8,7 +8,7 @@ from sqlalchemy.exc import DBAPIError
 
 from app.core.config import get_database_url
 from app.db.base import make_session_factory
-from app.identity.service import register_identity, resolve_session
+from app.identity.service import register_identity, resolve_session, rotate_session
 from tests.postgres_ci import require_disposable_ci_database
 
 
@@ -80,3 +80,10 @@ def test_identity_session_lifecycle_uses_postgresql_constraints() -> None:
         assert resolved is not None
         assert resolved.user.email == email
         assert resolved.csrf_token
+        successor = rotate_session(session, resolved)
+        successor_token = successor.session_token
+        assert successor.session.rotation_predecessor_id == resolved.session.id
+
+    with factory.begin() as session:
+        assert resolve_session(session, session_token, rotate_csrf=False) is None
+        assert resolve_session(session, successor_token, rotate_csrf=False) is not None
