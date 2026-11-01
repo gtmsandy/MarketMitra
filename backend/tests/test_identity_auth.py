@@ -109,6 +109,11 @@ def test_register_creates_user_hashed_credentials_and_audit_event(
             "password": "correct horse battery staple",
         },
         {
+            "email": "investor\x00@example.com",
+            "display_name": "Investor",
+            "password": "correct horse battery staple",
+        },
+        {
             "email": "investor@example.com",
             "display_name": " ",
             "password": "correct horse battery staple",

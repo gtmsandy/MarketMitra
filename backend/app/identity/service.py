@@ -61,14 +61,16 @@ def _audit(
     outcome: str,
     *,
     actor_user: User | None = None,
+    target_user: User | None = None,
     identity_session: UserSession | None = None,
 ) -> None:
+    target = target_user or actor_user
     session.add(
         SecurityAuditEvent(
             event_type=event_type,
             outcome=outcome,
             actor_user_id=actor_user.id if actor_user else None,
-            target_user_id=actor_user.id if actor_user else None,
+            target_user_id=target.id if target else None,
             session_id=identity_session.id if identity_session else None,
             event_metadata={},
         )
@@ -295,3 +297,34 @@ def update_profile(session: Session, grant: SessionGrant, display_name: str) -> 
         identity_session=grant.session,
     )
     return grant.user
+
+
+def provision_admin(
+    session: Session, *, email: str, display_name: str, password: str
+) -> User:
+    if session.scalar(select(User.id).where(User.email == email)) is not None:
+        raise RegistrationUnavailable
+
+    now = _now()
+    admin = User(
+        email=email,
+        display_name=display_name,
+        password_hash=hash_password(password),
+        role="ADMIN",
+        state="ACTIVE",
+        created_at=now,
+        updated_at=now,
+        password_changed_at=now,
+    )
+    session.add(admin)
+    try:
+        session.flush()
+    except IntegrityError as exc:
+        raise RegistrationUnavailable from exc
+    _audit(
+        session,
+        "ADMIN_PROVISIONED",
+        "SUCCESS",
+        target_user=admin,
+    )
+    return admin

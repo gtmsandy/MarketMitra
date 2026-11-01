@@ -21,8 +21,8 @@
 ## Checkpoint 4 — Authorization and administration
 
 - [x] Current-user and require-admin dependencies.
-- [ ] Profile update and controlled offline admin provisioning.
-- [ ] Append-only, allowlisted security audit verification.
+- [x] Profile update and controlled offline admin provisioning.
+- [x] Append-only, allowlisted security audit verification.
 
 ## Checkpoint 5 — Frontend identity
 

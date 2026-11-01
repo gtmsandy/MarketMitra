@@ -14,7 +14,11 @@ _EMAIL_PATTERN = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 def normalize_email(value: str) -> str:
     normalized = value.strip().lower()
-    if len(normalized) > 254 or not _EMAIL_PATTERN.fullmatch(normalized):
+    if (
+        len(normalized) > 254
+        or not _EMAIL_PATTERN.fullmatch(normalized)
+        or any(unicodedata.category(character).startswith("C") for character in normalized)
+    ):
         raise ValueError("Enter a valid email address")
     return normalized
 
