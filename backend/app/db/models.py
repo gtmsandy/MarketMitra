@@ -1,9 +1,31 @@
-from datetime import datetime
+from datetime import datetime, timezone
+from uuid import UUID, uuid4
 
-from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Index, Integer, String, UniqueConstraint
+from sqlalchemy import (
+    JSON,
+    BigInteger,
+    Boolean,
+    CheckConstraint,
+    DateTime,
+    Float,
+    ForeignKey,
+    Identity,
+    Index,
+    Integer,
+    LargeBinary,
+    String,
+    UniqueConstraint,
+    Uuid,
+    text,
+)
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
+
+
+def _utc_now() -> datetime:
+    return datetime.now(timezone.utc)
 
 
 class Instrument(Base):
@@ -119,4 +141,137 @@ class LiveQuote(Base):
     __table_args__ = (
         UniqueConstraint("symbol", "timestamp", name="uq_live_quotes_symbol_timestamp"),
         Index("ix_live_quotes_symbol_timestamp", "symbol", "timestamp"),
+    )
+
+
+class User(Base):
+    """A registered MarketMitra identity."""
+
+    __tablename__ = "users"
+
+    id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
+    email: Mapped[str] = mapped_column(String(254), nullable=False)
+    display_name: Mapped[str] = mapped_column(String(80), nullable=False)
+    password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
+    role: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="USER", server_default="USER"
+    )
+    state: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="ACTIVE", server_default="ACTIVE"
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=_utc_now
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=_utc_now, onupdate=_utc_now
+    )
+    password_changed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=_utc_now
+    )
+
+    sessions: Mapped[list["UserSession"]] = relationship(
+        "UserSession", back_populates="user", cascade="all, delete-orphan"
+    )
+
+    __table_args__ = (
+        UniqueConstraint("email", name="uq_users_email"),
+        CheckConstraint("email = lower(trim(email))", name="ck_users_email_normalized"),
+        CheckConstraint("role in ('USER', 'ADMIN')", name="ck_users_role"),
+        CheckConstraint("state in ('ACTIVE', 'DISABLED')", name="ck_users_state"),
+        Index("ix_users_role_state", "role", "state"),
+    )
+
+
+class UserSession(Base):
+    """A revocable server-side session with hashed browser credentials."""
+
+    __tablename__ = "sessions"
+
+    id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
+    user_id: Mapped[UUID] = mapped_column(
+        Uuid, ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    token_verifier: Mapped[bytes] = mapped_column(LargeBinary(32), nullable=False)
+    csrf_verifier: Mapped[bytes] = mapped_column(LargeBinary(32), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=_utc_now
+    )
+    last_activity_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=_utc_now
+    )
+    idle_expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    absolute_expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    revocation_reason: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    rotation_predecessor_id: Mapped[UUID | None] = mapped_column(
+        Uuid, ForeignKey("sessions.id", ondelete="SET NULL"), nullable=True
+    )
+
+    user: Mapped[User] = relationship("User", back_populates="sessions")
+
+    __table_args__ = (
+        UniqueConstraint("token_verifier", name="uq_sessions_token_verifier"),
+        UniqueConstraint(
+            "rotation_predecessor_id", name="uq_sessions_rotation_predecessor"
+        ),
+        CheckConstraint(
+            "idle_expires_at <= absolute_expires_at",
+            name="ck_sessions_expiration_order",
+        ),
+        CheckConstraint(
+            "last_activity_at >= created_at and last_activity_at <= absolute_expires_at",
+            name="ck_sessions_activity_window",
+        ),
+        CheckConstraint(
+            "(revoked_at is null and revocation_reason is null) or "
+            "(revoked_at is not null and revocation_reason is not null)",
+            name="ck_sessions_revocation_pair",
+        ),
+        Index(
+            "ix_sessions_user_active",
+            "user_id",
+            "absolute_expires_at",
+            postgresql_where=text("revoked_at is null"),
+        ),
+        Index("ix_sessions_idle_expires_at", "idle_expires_at"),
+    )
+
+
+class SecurityAuditEvent(Base):
+    """Append-only authentication and authorization security evidence."""
+
+    __tablename__ = "security_audit_events"
+
+    id: Mapped[int] = mapped_column(
+        BigInteger, Identity(), primary_key=True, autoincrement=True
+    )
+    event_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    outcome: Mapped[str] = mapped_column(String(16), nullable=False)
+    actor_user_id: Mapped[UUID | None] = mapped_column(
+        Uuid, ForeignKey("users.id", ondelete="RESTRICT"), nullable=True
+    )
+    target_user_id: Mapped[UUID | None] = mapped_column(
+        Uuid, ForeignKey("users.id", ondelete="RESTRICT"), nullable=True
+    )
+    session_id: Mapped[UUID | None] = mapped_column(Uuid, nullable=True)
+    request_id: Mapped[UUID] = mapped_column(Uuid, nullable=False, default=uuid4)
+    event_metadata: Mapped[dict[str, object]] = mapped_column(
+        "metadata",
+        JSON().with_variant(JSONB, "postgresql"),
+        nullable=False,
+        default=dict,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=_utc_now
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "outcome in ('SUCCESS', 'FAILURE', 'DENIED')",
+            name="ck_security_audit_events_outcome",
+        ),
+        Index("ix_security_audit_events_created_at", "created_at"),
+        Index("ix_security_audit_events_actor", "actor_user_id", "created_at"),
+        Index("ix_security_audit_events_target", "target_user_id", "created_at"),
+        Index("ix_security_audit_events_request_id", "request_id"),
     )
