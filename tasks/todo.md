@@ -10,7 +10,7 @@
 - [x] Add identity ORM models and focused model tests.
 - [x] Add reversible migration after `0007`.
 - [x] Add Argon2id and opaque-token primitives with tests.
-- [ ] Test migration upgrade/downgrade on disposable PostgreSQL only.
+- [x] Test migration upgrade/downgrade on disposable PostgreSQL only.
 
 ## Checkpoint 3 — Authentication API
 
@@ -34,7 +34,7 @@
 ## Checkpoint 6 — Full verification
 
 - [ ] Backend focused and safe suites.
-- [ ] Disposable PostgreSQL integration suite.
+- [x] Disposable PostgreSQL integration suite.
 - [ ] Frontend tests, lint, type checks, and build.
 - [ ] Browser cookie/CORS/CSRF checks.
 - [ ] Diff and secret review.

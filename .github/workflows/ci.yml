@@ -50,6 +50,7 @@ jobs:
           python -m pytest tests -q
           --ignore=tests/test_pre_production_gate.py
           --ignore=tests/test_postgres_api.py
+          --ignore=tests/test_postgres_identity.py
 
   postgres-integration:
     name: PostgreSQL integration
