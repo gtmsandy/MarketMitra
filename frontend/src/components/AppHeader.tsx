@@ -4,6 +4,7 @@ import type { MarketOverview } from '../types/market'
 import { formatObservationDate } from '../utils/formatters'
 import StockSearch from './StockSearch'
 import { useLiveMarket } from '../live/useLiveMarket'
+import { useAuth } from '../auth/useAuth'
 
 type AppHeaderProps = {
   overview: MarketOverview | null
@@ -11,6 +12,7 @@ type AppHeaderProps = {
 
 function AppHeader({ overview }: AppHeaderProps) {
   const live = useLiveMarket()
+  const auth = useAuth()
   const rawStatus = overview?.market_status.toUpperCase() || 'CLOSED'
   let statusClass = 'closed'
   if (rawStatus === 'OPEN') statusClass = 'open'
@@ -33,6 +35,9 @@ function AppHeader({ overview }: AppHeaderProps) {
         <NavLink to="/" end>Dashboard</NavLink><NavLink to="/market/movers">Movers</NavLink><NavLink to="/market/sectors">Sectors</NavLink><NavLink to="/market/heatmap">Heatmap</NavLink>
       </nav>
       <StockSearch />
+      <div className="app-header__account">
+        {auth.user ? <><Link to="/profile">{auth.user.display_name}</Link>{auth.user.role === 'ADMIN' && <Link to="/admin">Admin</Link>}</> : <><Link to="/login">Sign in</Link><Link to="/register">Register</Link></>}
+      </div>
       <details className="app-header__mobile-nav"><summary>Menu</summary><nav aria-label="Mobile navigation"><NavLink to="/" end>Dashboard</NavLink><NavLink to="/market/movers">Movers</NavLink><NavLink to="/market/sectors">Sectors</NavLink><NavLink to="/market/heatmap">Heatmap</NavLink></nav></details>
       <div className="app-header__meta">
         {overview ? (

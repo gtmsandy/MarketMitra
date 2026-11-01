@@ -26,16 +26,16 @@
 
 ## Checkpoint 5 — Frontend identity
 
-- [ ] Register/login forms and authenticated bootstrap.
-- [ ] Profile, logout, and protected navigation.
-- [ ] Protected admin route and expired-session handling.
-- [ ] Anonymous market routes remain public.
+- [x] Register/login forms and authenticated bootstrap.
+- [x] Profile, logout, and protected navigation.
+- [x] Protected admin route and expired-session handling.
+- [x] Anonymous market routes remain public.
 
 ## Checkpoint 6 — Full verification
 
 - [ ] Backend focused and safe suites.
 - [x] Disposable PostgreSQL integration suite.
-- [ ] Frontend tests, lint, type checks, and build.
+- [x] Frontend tests, lint, type checks, and build.
 - [ ] Browser cookie/CORS/CSRF checks.
 - [ ] Diff and secret review.
 - [ ] Push and inspect five-job CI.
