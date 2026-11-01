@@ -7,6 +7,7 @@ export type AuthStatus = 'checking' | 'anonymous' | 'authenticated'
 export type AuthContextValue = {
   status: AuthStatus
   user: IdentityUser | null
+  csrfToken: string | null
   login: (email: string, password: string) => Promise<void>
   register: (email: string, displayName: string, password: string) => Promise<void>
   logout: () => Promise<void>
@@ -16,6 +17,7 @@ export type AuthContextValue = {
 export const AuthContext = createContext<AuthContextValue>({
   status: 'anonymous',
   user: null,
+  csrfToken: null,
   login: async () => undefined,
   register: async () => undefined,
   logout: async () => undefined,

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 
 import { getStockDetail, getStockHistory, getStockIntraday } from '../api/market'
 import PriceChart from '../components/PriceChart'
@@ -13,11 +13,16 @@ import {
   getChangeTone,
 } from '../utils/formatters'
 import { useLiveMarket } from '../live/useLiveMarket'
+import { useAuth } from '../auth/useAuth'
+import { addWatchlistItem, listWatchlists, type Watchlist } from '../api/watchlists'
+import { AuthRequestError } from '../api/auth'
 
 type Timeframe = '1D' | '1W' | '1M' | '1Y' | 'ALL'
 
 function StockDetailPage() {
   const live = useLiveMarket()
+  const auth = useAuth()
+  const navigate = useNavigate()
   const { symbol } = useParams<{ symbol: string }>()
   const [detail, setDetail] = useState<StockDetail | null>(null)
   const [history, setHistory] = useState<PriceHistoryPoint[]>([])
@@ -26,6 +31,8 @@ function StockDetailPage() {
   const [isIntradayLoading, setIsIntradayLoading] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [watchlists, setWatchlists] = useState<Watchlist[]>([])
+  const [watchlistMessage, setWatchlistMessage] = useState('')
 
   const loadStock = useCallback(async () => {
     if (!symbol) return
@@ -51,6 +58,24 @@ function StockDetailPage() {
     const timer = window.setTimeout(() => { void loadStock() }, 0)
     return () => window.clearTimeout(timer)
   }, [loadStock])
+
+  useEffect(() => {
+    if (auth.status !== 'authenticated') return
+    void listWatchlists().then(setWatchlists).catch(() => setWatchlists([]))
+  }, [auth.status])
+
+  async function addToWatchlist() {
+    if (!symbol || !auth.csrfToken) { navigate('/login', { state: { from: `/stocks/${symbol}` } }); return }
+    const target = watchlists[0]
+    if (!target) { navigate('/watchlists'); return }
+    try {
+      const updated = await addWatchlistItem(target.id, symbol, auth.csrfToken)
+      setWatchlists((current) => current.map((item) => item.id === updated.id ? updated : item))
+      setWatchlistMessage(`${symbol.toUpperCase()} added to ${target.name}.`)
+    } catch (caught) {
+      setWatchlistMessage(caught instanceof AuthRequestError ? caught.message : 'Could not add this stock.')
+    }
+  }
 
   // Lazy-load intraday observations when 1D is selected
   useEffect(() => {
@@ -145,6 +170,10 @@ function StockDetailPage() {
             <span className={`change change--${tone}`}>
               {formatSignedNumber(current.change)} ({formatPercentage(current.change_percent)})
             </span>
+          </div>
+          <div className="stock-detail-header__watchlist">
+            <button type="button" className="secondary-button" onClick={() => void addToWatchlist()}>{auth.user ? 'Add to watchlist' : 'Sign in to watchlist'}</button>
+            {watchlistMessage && <span role="status">{watchlistMessage}</span>}
           </div>
         </header>
 

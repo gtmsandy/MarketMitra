@@ -16,7 +16,7 @@ vi.mock('../src/api/auth', async (importOriginal) => {
 const user = { id: 'user-1', email: 'investor@example.com', display_name: 'Investor', role: 'USER' as const, created_at: '2026-11-01T00:00:00Z' }
 
 beforeEach(() => {
-  vi.mocked(useAuth).mockReturnValue({ status: 'anonymous', user: null, login: vi.fn(), register: vi.fn(), logout: vi.fn(), updateProfile: vi.fn() })
+  vi.mocked(useAuth).mockReturnValue({ status: 'anonymous', user: null, csrfToken: null, login: vi.fn(), register: vi.fn(), logout: vi.fn(), updateProfile: vi.fn() })
   vi.mocked(verifyAdminIdentity).mockReset()
 })
 
@@ -25,7 +25,7 @@ afterEach(() => cleanup())
 describe('identity pages', () => {
   it('rejects mismatched registration passwords before any request', () => {
     const register = vi.fn()
-    vi.mocked(useAuth).mockReturnValue({ status: 'anonymous', user: null, login: vi.fn(), register, logout: vi.fn(), updateProfile: vi.fn() })
+    vi.mocked(useAuth).mockReturnValue({ status: 'anonymous', user: null, csrfToken: null, login: vi.fn(), register, logout: vi.fn(), updateProfile: vi.fn() })
     render(<MemoryRouter><RegisterPage /></MemoryRouter>)
 
     fireEvent.change(screen.getByLabelText('Display name'), { target: { value: 'Investor' } })
@@ -39,7 +39,7 @@ describe('identity pages', () => {
   })
 
   it('requires backend confirmation before rendering the admin area', async () => {
-    vi.mocked(useAuth).mockReturnValue({ status: 'authenticated', user, login: vi.fn(), register: vi.fn(), logout: vi.fn(), updateProfile: vi.fn() })
+    vi.mocked(useAuth).mockReturnValue({ status: 'authenticated', user, csrfToken: 'csrf', login: vi.fn(), register: vi.fn(), logout: vi.fn(), updateProfile: vi.fn() })
     vi.mocked(verifyAdminIdentity).mockRejectedValue(new Error('403'))
     render(<MemoryRouter><AdminPage /></MemoryRouter>)
 

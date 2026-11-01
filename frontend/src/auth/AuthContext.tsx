@@ -75,6 +75,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [clearSession, csrfToken])
 
-  const value = useMemo(() => ({ status, user, login, register, logout, updateProfile }), [status, user, login, register, logout, updateProfile])
+  const value = useMemo(() => ({ status, user, csrfToken, login, register, logout, updateProfile }), [status, user, csrfToken, login, register, logout, updateProfile])
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }

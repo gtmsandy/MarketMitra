@@ -96,6 +96,28 @@ button {
 .profile-details dt { color: var(--color-text-secondary); }
 .profile-details dd { margin: 0; overflow-wrap: anywhere; font-weight: 650; }
 
+.watchlists-layout { display: grid; grid-template-columns: minmax(220px, 280px) 1fr; gap: var(--space-5); align-items: start; }
+.watchlists-sidebar, .watchlist-detail { padding: var(--space-5); }
+.watchlist-tabs { display: grid; gap: var(--space-2); margin: var(--space-4) 0; }
+.watchlist-tab { padding: 10px var(--space-3); border: 1px solid transparent; border-radius: var(--radius-control); color: var(--color-text-secondary); background: transparent; text-align: left; }
+.watchlist-tab:hover, .watchlist-tab--active { border-color: var(--color-border); color: var(--color-brand); background: #f0f6fb; font-weight: 700; }
+.watchlist-create { display: grid; gap: var(--space-2); }
+.watchlist-create input, .watchlist-search { width: 100%; padding: 10px var(--space-3); border: 1px solid var(--color-border); border-radius: var(--radius-control); }
+.watchlist-detail .data-panel__heading { justify-content: space-between; align-items: start; }
+.watchlist-delete, .watchlist-search-results .secondary-button { width: auto; margin-top: 0; }
+.watchlist-search { margin: var(--space-4) 0 var(--space-2); }
+.watchlist-search-results { display: grid; gap: var(--space-2); margin: 0 0 var(--space-5); padding: 0; list-style: none; }
+.watchlist-search-results li { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); padding: var(--space-3); border: 1px solid var(--color-border); border-radius: var(--radius-control); }
+.watchlist-search-results .secondary-button { padding: 6px 12px; }
+.empty-state { color: var(--color-text-secondary); line-height: 1.5; }
+.table-subtitle { display: block; margin-top: 3px; color: var(--color-text-secondary); font-size: .75rem; }
+.text-button { border: 0; color: var(--color-negative); background: transparent; font-weight: 650; }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+
+@media (max-width: 760px) {
+  .watchlists-layout { grid-template-columns: 1fr; }
+}
+
 .app-header__brand {
   color: var(--color-brand);
   font-size: 1.125rem;
