@@ -2,14 +2,14 @@
 
 ## Checkpoint 1 — CI coverage
 
-- [ ] Add `codex/**` push trigger without changing the five jobs.
-- [ ] Validate, commit, push, and confirm the run starts.
+- [x] Add `codex/**` push trigger without changing the five jobs.
+- [x] Validate, commit, push, and confirm the run starts.
 
 ## Checkpoint 2 — Persistence and cryptography
 
-- [ ] Add identity ORM models and focused model tests.
-- [ ] Add reversible migration after `0007`.
-- [ ] Add Argon2id and opaque-token primitives with tests.
+- [x] Add identity ORM models and focused model tests.
+- [x] Add reversible migration after `0007`.
+- [x] Add Argon2id and opaque-token primitives with tests.
 - [ ] Test migration upgrade/downgrade on disposable PostgreSQL only.
 
 ## Checkpoint 3 — Authentication API

@@ -94,6 +94,10 @@ jobs:
         run: python -c "from tests.postgres_ci import require_disposable_ci_database; print(require_disposable_ci_database())"
       - name: Apply Alembic migrations
         run: python -m alembic upgrade head
+      - name: Verify identity migration downgrade and re-upgrade
+        run: |
+          python -m alembic downgrade 0007
+          python -m alembic upgrade head
       - name: Verify migrations created the ORM schema
         run: |
           python - <<'PY'
@@ -114,7 +118,10 @@ jobs:
       - name: Seed provenance-approved synthetic staging data
         run: python -m tests.seed_staging_ci
       - name: Run isolated PostgreSQL API tests
-        run: python -m pytest tests/test_postgres_api.py -q
+        run: >-
+          python -m pytest
+          tests/test_postgres_api.py
+          tests/test_postgres_identity.py -q
 
   frontend:
     name: Frontend verification
