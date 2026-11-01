@@ -188,7 +188,7 @@ function StockDetailPage() {
               <span>
                 {timeframe === '1D'
                   ? 'Intraday Trading Observations'
-                  : 'Database records · Closing price'}
+                  : 'Historical closing prices'}
               </span>
             </div>
             <div className="timeframe-selector" role="group" aria-label="Chart timeframe">
@@ -222,7 +222,7 @@ function StockDetailPage() {
         </section>
 
         <p className="stock-detail-footer">
-          {liveQuote ? `${live.state?.provider ?? 'LIVE'} · Provider observation ` : 'Last Observation '}{formatObservationDate(current.last_updated)} · {liveQuote ? 'Current quote' : 'Database records'}
+          {liveQuote ? `${live.state?.provider ?? 'LIVE'} · Provider observation ` : 'Last Observation '}{formatObservationDate(current.last_updated)} · {liveQuote ? 'Current quote' : 'Historical records'}
         </p>
       </div>
     </main>

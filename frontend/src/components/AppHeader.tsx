@@ -20,6 +20,7 @@ function AppHeader({ overview }: AppHeaderProps) {
 
   const dataBadge = live.state?.provider === 'DEVELOPMENT_REPLAY' ? 'DEVELOPMENT REPLAY' : (overview?.data_freshness?.replace('_', ' ') ?? (rawStatus === 'OPEN' ? 'LIVE' : 'HISTORICAL'))
   const badgeClass = dataBadge === 'LIVE' ? 'market-badge--live' : 'market-badge--historical'
+  const statusLabel = dataBadge === 'LIVE' ? 'Market' : 'Snapshot status'
   return (
     <header className="app-header">
       <div className="app-header__identity">
@@ -37,7 +38,7 @@ function AppHeader({ overview }: AppHeaderProps) {
         {overview ? (
           <>
             <span className={`market-status market-status--${statusClass}`}>
-              Market {overview.market_status}
+              {statusLabel} {overview.market_status}
             </span>
             <span className={`market-badge ${badgeClass}`}>{dataBadge}</span>
             <span>Last Updated {formatObservationDate(overview.last_updated)}</span>

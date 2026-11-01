@@ -446,10 +446,6 @@ button {
   cursor: pointer;
 }
 
-.heatmap-container {
-  min-height: 240px;
-}
-
 .heatmap-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
