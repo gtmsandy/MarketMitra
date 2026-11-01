@@ -1,4 +1,5 @@
-import { cleanup, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { StrictMode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { getSession, loginIdentity } from '../src/api/auth'
@@ -39,6 +40,27 @@ describe('AuthProvider', () => {
     vi.mocked(getSession).mockResolvedValue(session)
     render(<AuthProvider><Observer /></AuthProvider>)
     expect(await screen.findByText('Investor')).toBeTruthy()
+    expect(screen.getByTestId('status').textContent).toBe('authenticated')
+  })
+
+  it('shares bootstrap across Strict Mode effect replay so rotation does not revoke the live session', async () => {
+    vi.mocked(getSession).mockResolvedValue(session)
+    render(<StrictMode><AuthProvider><Observer /></AuthProvider></StrictMode>)
+    expect(await screen.findByText('Investor')).toBeTruthy()
+    expect(getSession).toHaveBeenCalledTimes(1)
+    expect(screen.getByTestId('status').textContent).toBe('authenticated')
+  })
+
+  it('waits for bootstrap before login so an anonymous response cannot clear the new session', async () => {
+    let settleBootstrap!: (value: never) => void
+    vi.mocked(getSession).mockReturnValueOnce(new Promise((resolve) => { settleBootstrap = resolve }))
+    vi.mocked(loginIdentity).mockResolvedValueOnce(session)
+
+    render(<AuthProvider><Observer /></AuthProvider>)
+    fireEvent.click(screen.getByRole('button', { name: 'Login' }))
+    expect(loginIdentity).not.toHaveBeenCalled()
+    settleBootstrap(undefined as never)
+    await waitFor(() => expect(loginIdentity).toHaveBeenCalledWith({ email: 'investor@example.com', password: 'long-password' }))
     expect(screen.getByTestId('status').textContent).toBe('authenticated')
   })
 

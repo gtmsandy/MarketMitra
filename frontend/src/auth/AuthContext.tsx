@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import {
   AuthRequestError,
@@ -15,6 +15,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [status, setStatus] = useState<AuthStatus>('checking')
   const [user, setUser] = useState<IdentityUser | null>(null)
   const [csrfToken, setCsrfToken] = useState<string | null>(null)
+  const bootstrapPromise = useRef<ReturnType<typeof getSession> | null>(null)
 
   const clearSession = useCallback(() => {
     setUser(null)
@@ -23,17 +24,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [])
 
   useEffect(() => {
-    let active = true
-    void getSession().then((session) => {
-      if (!active) return
+    if (!bootstrapPromise.current) bootstrapPromise.current = getSession()
+    void bootstrapPromise.current.then((session) => {
       setUser(session.user)
       setCsrfToken(session.csrf_token)
       setStatus('authenticated')
-    }).catch(() => {
-      if (active) clearSession()
-    })
-    return () => { active = false }
+    }).catch(() => clearSession())
   }, [clearSession])
+
+  const awaitBootstrap = useCallback(async () => {
+    if (!bootstrapPromise.current) return
+    await bootstrapPromise.current.catch(() => undefined)
+  }, [])
 
   const applySession = useCallback((session: Awaited<ReturnType<typeof getSession>>) => {
     setUser(session.user)
@@ -42,12 +44,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [])
 
   const login = useCallback(async (email: string, password: string) => {
+    await awaitBootstrap()
     applySession(await loginIdentity({ email, password }))
-  }, [applySession])
+  }, [applySession, awaitBootstrap])
 
   const register = useCallback(async (email: string, displayName: string, password: string) => {
+    await awaitBootstrap()
     applySession(await registerIdentity({ email, display_name: displayName, password }))
-  }, [applySession])
+  }, [applySession, awaitBootstrap])
 
   const logout = useCallback(async () => {
     if (!csrfToken) {
