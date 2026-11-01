@@ -5,6 +5,7 @@ on:
     branches:
       - main
       - "chore/**"
+      - "codex/**"
       - "security/**"
   pull_request:
     branches:
