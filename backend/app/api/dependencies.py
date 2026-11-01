@@ -2,7 +2,7 @@ from collections.abc import Generator
 from functools import lru_cache
 from typing import Annotated
 
-from fastapi import Depends
+from fastapi import Depends, HTTPException, status
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.core.config import get_database_url, get_market_data_source
@@ -56,6 +56,33 @@ def _get_db_session() -> Generator[Session | None, None, None]:
 
 
 DbSession = Annotated[Session | None, Depends(_get_db_session)]
+
+
+@lru_cache(maxsize=1)
+def _get_identity_session_factory() -> sessionmaker[Session]:
+    from app.db.base import make_session_factory
+
+    return make_session_factory(get_database_url())
+
+
+def get_identity_session() -> Generator[Session, None, None]:
+    """Yield identity persistence independently of the market-data provider."""
+    try:
+        factory = _get_identity_session_factory()
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Identity service is unavailable",
+        ) from exc
+
+    session = factory()
+    try:
+        yield session
+    finally:
+        session.close()
+
+
+IdentitySession = Annotated[Session, Depends(get_identity_session)]
 
 
 # ---------------------------------------------------------------------------
