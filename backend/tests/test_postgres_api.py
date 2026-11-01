@@ -46,7 +46,7 @@ class TestPostgresMarketApi:
         assert resp.status_code == 200
         data = resp.json()
         assert data["nepse_index"] > 0
-        assert data["market_status"] == "Open"
+        assert data["market_status"] == "Closed"
         assert "last_updated" in data
 
     def test_top_gainers(self, postgres_client: TestClient) -> None:
@@ -81,7 +81,7 @@ class TestPostgresMarketApi:
         resp = postgres_client.get("/api/v1/market/breadth")
         assert resp.status_code == 200
         data = resp.json()
-        assert data["observation_date"] == "2026-09-03"
+        assert data["observation_date"] == "2026-09-09"
         assert data["advancing_count"] > 0
         assert data["declining_count"] > 0
         assert data["total_count"] == data["advancing_count"] + data["declining_count"] + data["unchanged_count"]
@@ -91,13 +91,19 @@ class TestPostgresMarketApi:
         resp = postgres_client.get("/api/v1/market/sectors")
         assert resp.status_code == 200
         data = resp.json()
-        assert data == []  # Deterministic mock instruments have no sector metadata.
+        assert [row["sector"] for row in data] == [
+            "Synthetic Energy",
+            "Synthetic Banking",
+            "Synthetic Manufacturing",
+        ]
+        assert all(row["stock_count"] == 2 for row in data)
 
     def test_market_heatmap(self, postgres_client: TestClient) -> None:
         resp = postgres_client.get("/api/v1/market/heatmap")
         assert resp.status_code == 200
         data = resp.json()
-        assert len(data) == 8
+        assert len(data) == 6
+        assert data[0]["symbol"] == "SYNBANKB"
         assert data[0]["weight_metric"] == "turnover"
 
 
@@ -107,20 +113,21 @@ class TestPostgresStocksApi:
         assert resp.status_code == 200
         data = resp.json()
         assert isinstance(data, list)
-        assert len(data) == 8
+        assert len(data) == 6
+        assert all(item["symbol"].startswith("SYN") for item in data)
 
     def test_search_stocks(self, postgres_client: TestClient) -> None:
-        resp = postgres_client.get("/api/v1/stocks", params={"q": "NABIL"})
+        resp = postgres_client.get("/api/v1/stocks", params={"q": "horizon"})
         assert resp.status_code == 200
         data = resp.json()
         symbols = {item["symbol"] for item in data}
-        assert "NABIL" in symbols
+        assert symbols == {"SYNBANKA"}
 
     def test_stock_detail_known_symbol(self, postgres_client: TestClient) -> None:
-        resp = postgres_client.get("/api/v1/stocks/NABIL")
+        resp = postgres_client.get("/api/v1/stocks/SYNBANKA")
         assert resp.status_code == 200
         data = resp.json()
-        assert data["symbol"] == "NABIL"
+        assert data["symbol"] == "SYNBANKA"
         assert data["ltp"] > 0
         assert data["open"] > 0
         assert data["high"] >= data["low"]
@@ -131,11 +138,11 @@ class TestPostgresStocksApi:
         assert resp.json()["detail"] == "Stock not found"
 
     def test_stock_history_known_symbol(self, postgres_client: TestClient) -> None:
-        resp = postgres_client.get("/api/v1/stocks/NABIL/history")
+        resp = postgres_client.get("/api/v1/stocks/SYNBANKA/history")
         assert resp.status_code == 200
         data = resp.json()
         assert isinstance(data, list)
-        assert len(data) == 180
+        assert len(data) == 4
         assert data[0]["date"] < data[-1]["date"]  # Chronological order
 
     def test_stock_history_unknown_symbol(self, postgres_client: TestClient) -> None:
@@ -144,7 +151,7 @@ class TestPostgresStocksApi:
 
     def test_stock_intraday_known_symbol_empty(self, postgres_client: TestClient) -> None:
         """Known symbol without live quotes returns an honest empty list with zero fake data."""
-        resp = postgres_client.get("/api/v1/stocks/NABIL/intraday")
+        resp = postgres_client.get("/api/v1/stocks/SYNBANKA/intraday")
         assert resp.status_code == 200
         data = resp.json()
         assert isinstance(data, list)

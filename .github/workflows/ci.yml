@@ -110,8 +110,8 @@ jobs:
           finally:
               engine.dispose()
           PY
-      - name: Seed deterministic mock data
-        run: python -m app.scripts.seed_market_data
+      - name: Seed provenance-approved synthetic staging data
+        run: python -m tests.seed_staging_ci
       - name: Run isolated PostgreSQL API tests
         run: python -m pytest tests/test_postgres_api.py -q
 
@@ -188,6 +188,13 @@ jobs:
           --require-publication-approved
       - name: Build API container without publishing
         run: docker build --tag "marketmitra-api:${GITHUB_SHA}" .
+      - name: Validate provenance inside API container
+        run: >-
+          docker run --rm --entrypoint python
+          "marketmitra-api:${GITHUB_SHA}"
+          -m app.scripts.validate_provenance
+          /app/provenance/deployment-manifest.json
+          --require-publication-approved
       - name: Verify API container runtime identity
         run: >-
           test "$(docker image inspect

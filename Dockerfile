@@ -15,6 +15,7 @@ RUN python -m pip install --no-cache-dir -r /tmp/requirements.txt
 COPY backend/app ./app
 COPY backend/alembic ./alembic
 COPY backend/alembic.ini ./alembic.ini
+COPY provenance ./provenance
 
 USER marketmitra
 EXPOSE 8000

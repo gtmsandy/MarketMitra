@@ -1,0 +1,46 @@
+{
+  "schema_version": "1",
+  "dataset_identifier": "marketmitra-synthetic-staging-v1",
+  "description": "Deterministic project-generated staging data; not NEPSE market data.",
+  "attribution": "MarketMitra synthetic staging data",
+  "instruments": [
+    {"symbol": "SYNBANKA", "company_name": "Synthetic Horizon Bank", "sector": "Synthetic Banking", "security_type": "EQUITY"},
+    {"symbol": "SYNBANKB", "company_name": "Synthetic Summit Bank", "sector": "Synthetic Banking", "security_type": "EQUITY"},
+    {"symbol": "SYNENERA", "company_name": "Synthetic Aurora Energy", "sector": "Synthetic Energy", "security_type": "EQUITY"},
+    {"symbol": "SYNENERB", "company_name": "Synthetic Cascade Energy", "sector": "Synthetic Energy", "security_type": "EQUITY"},
+    {"symbol": "SYNMAKEA", "company_name": "Synthetic Vertex Manufacturing", "sector": "Synthetic Manufacturing", "security_type": "EQUITY"},
+    {"symbol": "SYNMAKEB", "company_name": "Synthetic Foundry Manufacturing", "sector": "Synthetic Manufacturing", "security_type": "EQUITY"}
+  ],
+  "snapshots": [
+    {"nepse_index": 1000.0, "index_change": 0.0, "index_change_percent": 0.0, "turnover": 2983000.0, "total_volume": 28500, "total_transactions": 600, "market_status": "Closed", "captured_at": "2026-09-06T15:00:00+05:45"},
+    {"nepse_index": 1012.0, "index_change": 12.0, "index_change_percent": 1.2, "turnover": 3109500.0, "total_volume": 29300, "total_transactions": 620, "market_status": "Closed", "captured_at": "2026-09-07T15:00:00+05:45"},
+    {"nepse_index": 1008.0, "index_change": -4.0, "index_change_percent": -0.4, "turnover": 3087700.0, "total_volume": 29200, "total_transactions": 630, "market_status": "Closed", "captured_at": "2026-09-08T15:00:00+05:45"},
+    {"nepse_index": 1020.0, "index_change": 12.0, "index_change_percent": 1.19, "turnover": 4410190.0, "total_volume": 40000, "total_transactions": 650, "market_status": "Closed", "captured_at": "2026-09-09T15:00:00+05:45"}
+  ],
+  "prices": [
+    {"symbol": "SYNBANKA", "date": "2026-09-06", "open": 98.0, "high": 101.0, "low": 97.0, "close": 100.0, "volume": 5000, "turnover": 500000.0, "previous_close": 98.0, "change": 2.0, "change_percent": 2.0408},
+    {"symbol": "SYNBANKA", "date": "2026-09-07", "open": 100.0, "high": 103.0, "low": 99.0, "close": 102.0, "volume": 5200, "turnover": 530400.0, "previous_close": 100.0, "change": 2.0, "change_percent": 2.0},
+    {"symbol": "SYNBANKA", "date": "2026-09-08", "open": 102.0, "high": 103.0, "low": 99.0, "close": 100.0, "volume": 5100, "turnover": 510000.0, "previous_close": 102.0, "change": -2.0, "change_percent": -1.9608},
+    {"symbol": "SYNBANKA", "date": "2026-09-09", "open": 100.0, "high": 106.0, "low": 99.0, "close": 105.0, "volume": 6000, "turnover": 630000.0, "previous_close": 100.0, "change": 5.0, "change_percent": 5.0},
+    {"symbol": "SYNBANKB", "date": "2026-09-06", "open": 205.0, "high": 206.0, "low": 198.0, "close": 200.0, "volume": 4000, "turnover": 800000.0, "previous_close": 205.0, "change": -5.0, "change_percent": -2.439},
+    {"symbol": "SYNBANKB", "date": "2026-09-07", "open": 200.0, "high": 203.0, "low": 199.0, "close": 202.0, "volume": 4100, "turnover": 828200.0, "previous_close": 200.0, "change": 2.0, "change_percent": 1.0},
+    {"symbol": "SYNBANKB", "date": "2026-09-08", "open": 202.0, "high": 203.0, "low": 199.0, "close": 200.0, "volume": 4200, "turnover": 840000.0, "previous_close": 202.0, "change": -2.0, "change_percent": -0.9901},
+    {"symbol": "SYNBANKB", "date": "2026-09-09", "open": 200.0, "high": 201.0, "low": 191.0, "close": 192.0, "volume": 7000, "turnover": 1344000.0, "previous_close": 200.0, "change": -8.0, "change_percent": -4.0},
+    {"symbol": "SYNENERA", "date": "2026-09-06", "open": 148.0, "high": 152.0, "low": 147.0, "close": 150.0, "volume": 3000, "turnover": 450000.0, "previous_close": 148.0, "change": 2.0, "change_percent": 1.3514},
+    {"symbol": "SYNENERA", "date": "2026-09-07", "open": 150.0, "high": 153.0, "low": 149.0, "close": 152.0, "volume": 3100, "turnover": 471200.0, "previous_close": 150.0, "change": 2.0, "change_percent": 1.3333},
+    {"symbol": "SYNENERA", "date": "2026-09-08", "open": 152.0, "high": 154.0, "low": 151.0, "close": 153.0, "volume": 3200, "turnover": 489600.0, "previous_close": 152.0, "change": 1.0, "change_percent": 0.6579},
+    {"symbol": "SYNENERA", "date": "2026-09-09", "open": 153.0, "high": 154.0, "low": 152.0, "close": 153.0, "volume": 4500, "turnover": 688500.0, "previous_close": 153.0, "change": 0.0, "change_percent": 0.0},
+    {"symbol": "SYNENERB", "date": "2026-09-06", "open": 75.0, "high": 77.0, "low": 74.0, "close": 76.0, "volume": 6000, "turnover": 456000.0, "previous_close": 75.0, "change": 1.0, "change_percent": 1.3333},
+    {"symbol": "SYNENERB", "date": "2026-09-07", "open": 76.0, "high": 78.0, "low": 75.0, "close": 77.0, "volume": 6100, "turnover": 469700.0, "previous_close": 76.0, "change": 1.0, "change_percent": 1.3158},
+    {"symbol": "SYNENERB", "date": "2026-09-08", "open": 77.0, "high": 78.0, "low": 75.0, "close": 76.0, "volume": 6200, "turnover": 471200.0, "previous_close": 77.0, "change": -1.0, "change_percent": -1.2987},
+    {"symbol": "SYNENERB", "date": "2026-09-09", "open": 76.0, "high": 79.0, "low": 75.0, "close": 77.52, "volume": 8000, "turnover": 620160.0, "previous_close": 76.0, "change": 1.52, "change_percent": 2.0},
+    {"symbol": "SYNMAKEA", "date": "2026-09-06", "open": 50.0, "high": 52.0, "low": 49.0, "close": 51.0, "volume": 7000, "turnover": 357000.0, "previous_close": 50.0, "change": 1.0, "change_percent": 2.0},
+    {"symbol": "SYNMAKEA", "date": "2026-09-07", "open": 51.0, "high": 53.0, "low": 50.0, "close": 52.0, "volume": 7200, "turnover": 374400.0, "previous_close": 51.0, "change": 1.0, "change_percent": 1.9608},
+    {"symbol": "SYNMAKEA", "date": "2026-09-08", "open": 52.0, "high": 53.0, "low": 50.0, "close": 51.0, "volume": 7100, "turnover": 362100.0, "previous_close": 52.0, "change": -1.0, "change_percent": -1.9231},
+    {"symbol": "SYNMAKEA", "date": "2026-09-09", "open": 51.0, "high": 52.0, "low": 49.0, "close": 49.98, "volume": 9000, "turnover": 449820.0, "previous_close": 51.0, "change": -1.02, "change_percent": -2.0},
+    {"symbol": "SYNMAKEB", "date": "2026-09-06", "open": 118.0, "high": 121.0, "low": 117.0, "close": 120.0, "volume": 3500, "turnover": 420000.0, "previous_close": 118.0, "change": 2.0, "change_percent": 1.6949},
+    {"symbol": "SYNMAKEB", "date": "2026-09-07", "open": 120.0, "high": 122.0, "low": 119.0, "close": 121.0, "volume": 3600, "turnover": 435600.0, "previous_close": 120.0, "change": 1.0, "change_percent": 0.8333},
+    {"symbol": "SYNMAKEB", "date": "2026-09-08", "open": 121.0, "high": 123.0, "low": 120.0, "close": 122.0, "volume": 3400, "turnover": 414800.0, "previous_close": 121.0, "change": 1.0, "change_percent": 0.8264},
+    {"symbol": "SYNMAKEB", "date": "2026-09-09", "open": 122.0, "high": 124.0, "low": 121.0, "close": 123.22, "volume": 5500, "turnover": 677710.0, "previous_close": 122.0, "change": 1.22, "change_percent": 1.0}
+  ]
+}

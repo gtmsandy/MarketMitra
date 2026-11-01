@@ -63,6 +63,15 @@ def _require(condition: bool, message: str) -> None:
         raise SmokeTestError(message)
 
 
+def _numeric_values(rows, field: str) -> list[float] | None:
+    if not isinstance(rows, list) or not all(
+        isinstance(item, dict) and isinstance(item.get(field), (int, float))
+        for item in rows
+    ):
+        return None
+    return [float(item[field]) for item in rows]
+
+
 def _check_websocket(api_base_url: str, origin: str, timeout: float) -> None:
     from websockets.sync.client import connect
 
@@ -124,11 +133,23 @@ def run_smoke_tests(
 
     stocks = _fetch_json(f"{api}/api/v1/stocks", timeout, opener)
     _require(
-        isinstance(stocks, list) and stocks and isinstance(stocks[0], dict),
+        isinstance(stocks, list) and stocks and all(isinstance(item, dict) for item in stocks),
         "Stock listing is empty or invalid",
     )
     symbol = stocks[0].get("symbol")
     _require(isinstance(symbol, str) and symbol, "Stock symbol is missing")
+    _require(
+        all(isinstance(item.get("symbol"), str) and item["symbol"].startswith("SYN") for item in stocks),
+        "Stock listing contains a non-synthetic staging symbol",
+    )
+    _require(
+        all(
+            isinstance(item.get("company_name"), str)
+            and item["company_name"].startswith("Synthetic ")
+            for item in stocks
+        ),
+        "Stock listing is missing explicit synthetic-data labels",
+    )
     query = urlencode({"q": symbol})
     search = _fetch_json(f"{api}/api/v1/stocks?{query}", timeout, opener)
     _require(
@@ -146,17 +167,61 @@ def run_smoke_tests(
         "Stock detail structure failed",
     )
     _require(
-        isinstance(history, list) and history and isinstance(history[0], dict),
+        isinstance(history, list) and len(history) >= 2 and isinstance(history[0], dict),
         "Stock history is empty or invalid",
     )
     _require({"date", "open", "high", "low", "close", "volume"} <= history[0].keys(), "Stock history structure failed")
     checks.append("stock-detail-history")
 
+    gainers = _fetch_json(f"{api}/api/v1/market/gainers", timeout, opener)
+    losers = _fetch_json(f"{api}/api/v1/market/losers", timeout, opener)
+    active = _fetch_json(f"{api}/api/v1/market/most-active", timeout, opener)
+    gainer_changes = _numeric_values(gainers, "change_percent")
+    loser_changes = _numeric_values(losers, "change_percent")
+    active_turnovers = _numeric_values(active, "turnover")
+    _require(
+        bool(gainer_changes)
+        and all(value > 0 for value in gainer_changes)
+        and gainer_changes == sorted(gainer_changes, reverse=True),
+        "Gainers are empty, invalid, or incorrectly ranked",
+    )
+    _require(
+        bool(loser_changes)
+        and all(value < 0 for value in loser_changes)
+        and loser_changes == sorted(loser_changes),
+        "Losers are empty, invalid, or incorrectly ranked",
+    )
+    _require(
+        bool(active_turnovers)
+        and active_turnovers == sorted(active_turnovers, reverse=True),
+        "Most-active stocks are empty, invalid, or incorrectly ranked",
+    )
+    _require(gainers[0].get("symbol") == "SYNBANKA", "Unexpected leading synthetic gainer")
+    _require(losers[0].get("symbol") == "SYNBANKB", "Unexpected leading synthetic loser")
+    _require(active[0].get("symbol") == "SYNBANKB", "Unexpected leading most-active stock")
+    checks.append("market-movers")
+
     sectors = _fetch_json(f"{api}/api/v1/market/sectors", timeout, opener)
+    _require(
+        isinstance(sectors, list) and len(sectors) == 3
+        and all(isinstance(item, dict) for item in sectors)
+        and all(item.get("sector", "").startswith("Synthetic ") for item in sectors)
+        and all(item.get("stock_count") == 2 for item in sectors),
+        "Sector analytics do not match the approved synthetic fixture",
+    )
+    checks.append("sector-analytics")
+
     heatmap = _fetch_json(f"{api}/api/v1/market/heatmap", timeout, opener)
-    _require(isinstance(sectors, list), "Sector response must be a list")
-    _require(isinstance(heatmap, list), "Heatmap response must be a list")
-    checks.append("sector-heatmap")
+    heatmap_turnovers = _numeric_values(heatmap, "turnover")
+    _require(
+        isinstance(heatmap, list) and len(heatmap) == 6
+        and all(isinstance(item, dict) for item in heatmap)
+        and all(item.get("symbol", "").startswith("SYN") for item in heatmap)
+        and bool(heatmap_turnovers)
+        and heatmap_turnovers == sorted(heatmap_turnovers, reverse=True),
+        "Heatmap does not match the approved synthetic fixture",
+    )
+    checks.append("heatmap")
 
     request = Request(f"{frontend}/", headers={"Accept": "text/html"})
     try:

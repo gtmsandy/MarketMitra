@@ -30,6 +30,8 @@ _REQUIRED_FIELDS = {
     "license_or_contract_evidence_reference",
     "authorization_status",
     "publication_approved",
+    "instrument_count",
+    "price_observation_count",
 }
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
 
@@ -132,9 +134,14 @@ def validate_manifest(
         for field in _REQUIRED_FIELDS - {
             "publication_approved",
             "observation_period",
+            "instrument_count",
+            "price_observation_count",
         }:
             if not isinstance(dataset[field], str) or not dataset[field].strip():
                 errors.append(f"{prefix}.{field} must be a non-empty string")
+        for field in {"instrument_count", "price_observation_count"}:
+            if not isinstance(dataset[field], int) or dataset[field] < 0:
+                errors.append(f"{prefix}.{field} must be a non-negative integer")
 
     return errors
 

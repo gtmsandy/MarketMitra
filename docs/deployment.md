@@ -14,7 +14,8 @@ authorize provisioning, publication, or live-market activation.
 
 The API image pins the official `python:3.14.0-slim-bookworm` multi-architecture
 index by SHA-256, installs `backend/requirements.txt`, runs as the non-root
-`marketmitra` user, and starts:
+`marketmitra` user, includes only the approved provenance artifacts needed for
+staging validation, and starts:
 
 ```text
 python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 1 --no-proxy-headers
@@ -90,8 +91,20 @@ python -m app.scripts.validate_provenance \
   --require-publication-approved
 ```
 
-Unknown-rights data cannot pass this gate. The committed fixture is synthetic
-validation data only and is not a complete deployable market dataset.
+Unknown-rights data cannot pass this gate. The committed fixture is fictional,
+deterministic staging data and is the only dataset accepted by the staging seed
+entry point. After Alembic reaches the reviewed head, run the seed once with an
+exact database-name confirmation token:
+
+```bash
+MARKETMITRA_CONFIRM_STAGING=<exact-database-name> \
+python -m app.scripts.seed_staging_data \
+  --manifest /app/provenance/deployment-manifest.json
+```
+
+The command rejects local, shared, development, production, unencrypted,
+unmigrated, or non-empty targets. It never creates a schema and performs a
+rollback-only validation pass before the committed ingestion.
 
 ## Pre-release acceptance
 

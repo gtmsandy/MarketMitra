@@ -43,6 +43,19 @@ python -m alembic current
 The reported current revision must equal the reviewed head. Never put this
 command in API startup or run multiple migration tasks concurrently.
 
+For the synthetic staging dataset only, validate and load it from the same
+immutable artifact after migration:
+
+```bash
+python -m app.scripts.validate_provenance \
+  /app/provenance/deployment-manifest.json --require-publication-approved
+MARKETMITRA_CONFIRM_STAGING=<exact-database-name> \
+  python -m app.scripts.seed_staging_data \
+  --manifest /app/provenance/deployment-manifest.json
+```
+
+Do not substitute `seed_market_data`; it remains a development fixture command.
+
 ## 5. Release and verification
 
 1. Start the SHA/digest-pinned API image with one worker.

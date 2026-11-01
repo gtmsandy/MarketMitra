@@ -41,6 +41,8 @@ python -m app.scripts.validate_provenance \
   ../provenance/deployment-manifest.json --require-publication-approved
 ```
 
-The current manifest contains only a tiny synthetic validator fixture. It does
-not establish authorization for any NEPSE-derived historical dataset and must
-not be presented as market data.
+The current manifest describes the exact deterministic synthetic staging
+fixture loaded by `app.scripts.seed_staging_data`. Its digest, schema version,
+instrument count, and price-observation count are verified before any database
+operation. It does not establish authorization for any NEPSE-derived historical
+dataset and must never be presented as market data.
