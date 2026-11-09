@@ -107,6 +107,7 @@ export type StockDetail = {
   fifty_two_week_low: number
   stock_observation_date?: string | null
   market_snapshot_date?: string | null
+  data_freshness?: string
 }
 
 export type MarketBreadth = {

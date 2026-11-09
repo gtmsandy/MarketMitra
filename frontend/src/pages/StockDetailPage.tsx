@@ -2,7 +2,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 
 import { getStockDetail, getStockHistory, getStockIntraday } from '../api/market'
-import PriceChart from '../components/PriceChart'
+import PriceChart, { type ChartDisplayOptions } from '../components/PriceChart'
+import { calculateTechnicalIndicators, DEFAULT_INDICATOR_PERIODS, type TechnicalIndicators } from '../technical/indicators'
 import type { IntradayPricePoint, PriceHistoryPoint, StockDetail } from '../types/market'
 import {
   formatObservationDate,
@@ -33,6 +34,16 @@ function StockDetailPage() {
   const [error, setError] = useState<string | null>(null)
   const [watchlists, setWatchlists] = useState<Watchlist[]>([])
   const [watchlistMessage, setWatchlistMessage] = useState('')
+  const [chartOptions, setChartOptions] = useState<ChartDisplayOptions>({
+    candleMode: false,
+    showVolume: true,
+    showSma: false,
+    showEma: false,
+    showBollinger: false,
+    showRsi: false,
+    showMacd: false,
+  })
+  const [periods, setPeriods] = useState(DEFAULT_INDICATOR_PERIODS)
 
   const loadStock = useCallback(async () => {
     if (!symbol) return
@@ -120,6 +131,24 @@ function StockDetailPage() {
     const filtered = history.filter((p) => new Date(p.date) >= cutoff)
     return filtered.length > 0 ? filtered : history.slice(-5)
   }, [timeframe, history, intraday])
+
+  const indicators = useMemo<TechnicalIndicators | null>(() => {
+    try {
+      return calculateTechnicalIndicators(chartData, periods)
+    } catch {
+      return null
+    }
+  }, [chartData, periods])
+
+  function updatePeriod(key: keyof typeof periods, value: string) {
+    const parsed = Number(value)
+    if (!Number.isFinite(parsed)) return
+    setPeriods((current) => ({ ...current, [key]: Math.min(200, Math.max(2, Math.round(parsed))) }))
+  }
+
+  function toggleChartOption(key: keyof ChartDisplayOptions) {
+    setChartOptions((current) => ({ ...current, [key]: !current[key] }))
+  }
   if (isLoading) {
     return (
       <main className="stock-detail-page">
@@ -246,12 +275,27 @@ function StockDetailPage() {
               </p>
             </div>
           ) : (
-            <PriceChart data={chartData} />
+            <>
+              <section className="technical-controls" aria-labelledby="technical-controls-heading">
+                <div className="technical-controls__heading"><div><h2 id="technical-controls-heading">Technical analysis</h2><p>Indicators use only the observations visible in the selected timeframe.</p></div><span>Historical · no recommendations</span></div>
+                <div className="technical-controls__grid">
+                  <label><input aria-label="Show candlesticks" type="checkbox" checked={chartOptions.candleMode} onChange={() => toggleChartOption('candleMode')} /> Candlesticks</label>
+                  <label><input aria-label="Show volume" type="checkbox" checked={chartOptions.showVolume} onChange={() => toggleChartOption('showVolume')} /> Volume</label>
+                  <label><input aria-label="Show SMA" type="checkbox" checked={chartOptions.showSma} onChange={() => toggleChartOption('showSma')} /> SMA <input aria-label="SMA period" type="number" min="2" max="200" value={periods.sma} onChange={(event) => updatePeriod('sma', event.target.value)} /></label>
+                  <label><input aria-label="Show EMA" type="checkbox" checked={chartOptions.showEma} onChange={() => toggleChartOption('showEma')} /> EMA <input aria-label="EMA period" type="number" min="2" max="200" value={periods.ema} onChange={(event) => updatePeriod('ema', event.target.value)} /></label>
+                  <label><input aria-label="Show Bollinger Bands" type="checkbox" checked={chartOptions.showBollinger} onChange={() => toggleChartOption('showBollinger')} /> Bollinger Bands</label>
+                  <label><input aria-label="Show RSI" type="checkbox" checked={chartOptions.showRsi} onChange={() => toggleChartOption('showRsi')} /> RSI <input aria-label="RSI period" type="number" min="2" max="200" value={periods.rsi} onChange={(event) => updatePeriod('rsi', event.target.value)} /></label>
+                  <label><input aria-label="Show MACD" type="checkbox" checked={chartOptions.showMacd} onChange={() => toggleChartOption('showMacd')} /> MACD</label>
+                </div>
+              </section>
+              {indicators && <div className="technical-status" aria-live="polite">{Object.entries(indicators.availability).filter(([key]) => chartOptions[`show${key.charAt(0).toUpperCase()}${key.slice(1)}` as keyof ChartDisplayOptions]).map(([key, status]) => <p key={key} className={status.available ? 'technical-status__item technical-status__item--available' : 'technical-status__item'}>{status.message}</p>)}</div>}
+              <PriceChart data={chartData} indicators={indicators ?? undefined} options={chartOptions} />
+            </>
           )}
         </section>
 
         <p className="stock-detail-footer">
-          {liveQuote ? `${live.state?.provider ?? 'LIVE'} · Provider observation ` : 'Last Observation '}{formatObservationDate(current.last_updated)} · {liveQuote ? 'Current quote' : 'Historical records'}
+          {liveQuote ? `${live.state?.provider ?? 'LIVE'} · Provider observation ` : 'Last Observation '}{formatObservationDate(current.last_updated)} · {liveQuote ? 'Current quote' : `${detail.data_freshness ?? 'HISTORICAL'} synthetic/historical · Historical records`}
         </p>
       </div>
     </main>
