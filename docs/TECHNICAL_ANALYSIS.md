@@ -23,6 +23,7 @@ required when an indicator cannot be calculated.
 
 The persistent interview demo currently contains four daily observations per
 instrument. It therefore intentionally shows insufficient-history messages for
-the default 14/20/26-period indicators. Longer deterministic sequences used by
-unit tests are in frontend test fixtures only and are not ingested into
-`marketmitra_demo`.
+the default 14/20/26-period indicators. The separate
+`marketmitra-synthetic-technical-analysis-v1` fixture provides 120 generated
+weekday sessions per instrument for deterministic indicator and ingestion
+verification. It is not ingested into `marketmitra_demo` by this change.

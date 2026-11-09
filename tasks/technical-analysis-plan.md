@@ -5,11 +5,18 @@ This plan is intentionally separate from the historical secure-identity plan in
 
 ## Task list
 
-- [ ] Add an explicit demo startup command that loads `.env.demo.local`, verifies the database identity and Alembic head, then starts FastAPI.
-- [ ] Add calculation-layer indicators with bounded periods, chronological input handling, warm-up/null output, and deterministic synthetic tests.
-- [ ] Extend the existing stock-detail chart with volume, candlestick/close mode, overlays, RSI/MACD panels, controls, provenance and insufficient-data messaging.
-- [ ] Add frontend and backend regression coverage without modifying the persistent demo database.
-- [ ] Run safe backend, disposable PostgreSQL CI, frontend, browser, lint, build and secret checks; commit and push atomic checkpoints.
+- [x] Add an explicit demo startup command that loads `.env.demo.local`, verifies the database identity and Alembic head, then starts FastAPI.
+- [x] Add calculation-layer indicators with bounded periods, chronological input handling, warm-up/null output, and deterministic synthetic tests.
+- [x] Extend the existing stock-detail chart with volume, candlestick/close mode, overlays, RSI/MACD panels, controls, provenance and insufficient-data messaging.
+- [x] Add frontend and backend regression coverage without modifying the persistent demo database.
+- [x] Run safe backend, disposable PostgreSQL CI, frontend, browser, lint, build and secret checks; commit and push atomic checkpoints.
+
+## Extended fixture phase
+
+- [ ] Generate a separate deterministic, synthetic, weekday-only technical-analysis fixture while preserving the original fixture as an immutable baseline.
+- [ ] Add provenance and validation tests for determinism, OHLCV integrity, uniqueness, chronology, and manifest digest.
+- [ ] Add a dry-run-first ingestion preflight that verifies the target identity, schema head, checksum, baseline overlap, and idempotency without touching `marketmitra_demo`.
+- [ ] Verify indicator outputs and chart behavior against the extended fixture using disposable database/in-memory test data only.
 
 ## Acceptance criteria
 
