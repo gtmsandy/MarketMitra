@@ -10,6 +10,9 @@ import type {
   SectorPerformance,
   StockDetail,
   StockQuote,
+  ScreenerSortBy,
+  ScreenerSortOrder,
+  StockScreenerResponse,
 } from '../types/market'
 
 export function getMarketOverview(): Promise<MarketOverview> {
@@ -34,6 +37,30 @@ export function getStocks(): Promise<StockQuote[]> {
 
 export function searchStocks(query: string): Promise<StockQuote[]> {
   return fetchJson(`/api/v1/stocks?q=${encodeURIComponent(query)}`)
+}
+
+export type StockScreenerParams = {
+  q?: string
+  sector?: string
+  min_price?: number
+  max_price?: number
+  min_change_percent?: number
+  max_change_percent?: number
+  min_volume?: number
+  min_turnover?: number
+  page?: number
+  page_size?: number
+  sort_by?: ScreenerSortBy
+  sort_order?: ScreenerSortOrder
+}
+
+export function screenStocks(params: StockScreenerParams = {}): Promise<StockScreenerResponse> {
+  const query = new URLSearchParams()
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== undefined && value !== '') query.set(key, String(value))
+  })
+  const suffix = query.toString()
+  return fetchJson(`/api/v1/stocks/screener${suffix ? `?${suffix}` : ''}`)
 }
 
 export function getStockDetail(symbol: string): Promise<StockDetail> {
