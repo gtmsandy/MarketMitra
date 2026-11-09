@@ -10,6 +10,10 @@ from app.models.market import (
     MostActiveStock,
     SectorPerformance,
     StockQuote,
+    StockScreenerItem,
+    StockScreenerResponse,
+    ScreenSortBy,
+    ScreenSortOrder,
 )
 from app.models.stock import IntradayPricePoint, PriceHistoryPoint, StockDetail
 from app.providers.base import MarketDataProvider
@@ -144,6 +148,19 @@ class MockMarketProvider(MarketDataProvider):
         self._stock_by_symbol: dict[str, StockQuote] = {
             stock.symbol: stock for stock in self._stocks
         }
+        sector_by_symbol = {
+            "NABIL": "Commercial Banks",
+            "NICA": "Commercial Banks",
+            "GBIME": "Commercial Banks",
+            "SCB": "Commercial Banks",
+            "NTC": "Telecommunications",
+            "UPPER": "Hydropower",
+            "CHCL": "Hydropower",
+            "SHIVM": "Manufacturing",
+        }
+        for stock in self._stocks:
+            stock.sector = sector_by_symbol[stock.symbol]
+            stock.turnover = self._turnovers[stock.symbol]
 
     def get_market_overview(self) -> MarketOverview:
         return MarketOverview(
@@ -189,6 +206,66 @@ class MockMarketProvider(MarketDataProvider):
             stock for stock in self._stocks
             if term in stock.symbol.lower() or term in stock.company_name.lower()
         ]
+
+    def screen_stocks(
+        self,
+        *,
+        query: str | None,
+        sector: str | None,
+        min_price: float | None,
+        max_price: float | None,
+        min_change_percent: float | None,
+        max_change_percent: float | None,
+        min_volume: int | None,
+        min_turnover: float | None,
+        page: int,
+        page_size: int,
+        sort_by: ScreenSortBy,
+        sort_order: ScreenSortOrder,
+    ) -> StockScreenerResponse:
+        term = query.strip().lower() if query else None
+        normalized_sector = sector.strip().lower() if sector else None
+        candidates = [
+            stock for stock in self._stocks
+            if (not term or term in stock.symbol.lower() or term in stock.company_name.lower())
+            and (not normalized_sector or (stock.sector or "").lower() == normalized_sector)
+            and (min_price is None or stock.ltp >= min_price)
+            and (max_price is None or stock.ltp <= max_price)
+            and (min_change_percent is None or stock.change_percent >= min_change_percent)
+            and (max_change_percent is None or stock.change_percent <= max_change_percent)
+            and (min_volume is None or stock.volume >= min_volume)
+            and (min_turnover is None or (stock.turnover is not None and stock.turnover >= min_turnover))
+        ]
+        items = [
+            StockScreenerItem(
+                symbol=stock.symbol,
+                company_name=stock.company_name,
+                sector=stock.sector,
+                ltp=stock.ltp,
+                change_percent=stock.change_percent,
+                volume=stock.volume,
+                turnover=stock.turnover,
+                observation_date=MOCK_END_DATE.isoformat(),
+            )
+            for stock in candidates
+        ]
+        items.sort(key=lambda item: item.symbol)
+        if sort_by == "symbol":
+            primary = lambda item: item.symbol
+        else:
+            primary = lambda item: getattr(item, {"price": "ltp"}.get(sort_by, sort_by))
+        non_null = [item for item in items if primary(item) is not None]
+        missing = [item for item in items if primary(item) is None]
+        non_null.sort(key=primary, reverse=sort_order == "desc")
+        items = non_null + missing
+        start = (page - 1) * page_size
+        return StockScreenerResponse(
+            items=items[start:start + page_size],
+            total=len(items),
+            page=page,
+            page_size=page_size,
+            observation_date=MOCK_END_DATE.isoformat(),
+        )
 
     def get_stock_detail(self, symbol: str) -> StockDetail | None:
         stock = self._stock_by_symbol.get(symbol.upper())

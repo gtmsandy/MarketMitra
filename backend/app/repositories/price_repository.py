@@ -7,7 +7,13 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, contains_eager
 
 from app.db.models import DailyPrice, Instrument, LiveQuote
-from app.models.market import HeatmapItem, MarketBreadth, SectorPerformance
+from app.models.market import (
+    HeatmapItem,
+    MarketBreadth,
+    ScreenSortBy,
+    ScreenSortOrder,
+    SectorPerformance,
+)
 
 
 @dataclass
@@ -72,6 +78,25 @@ class DailyPriceRepository(ABC):
         self, search_term: str | None = None
     ) -> list[tuple[Instrument, DailyPrice]]:
         """Return instruments joined to their latest valid price, sorted by symbol."""
+
+    @abstractmethod
+    def screen_latest_instrument_prices(
+        self,
+        *,
+        query: str | None,
+        sector: str | None,
+        min_price: float | None,
+        max_price: float | None,
+        min_change_percent: float | None,
+        max_change_percent: float | None,
+        min_volume: int | None,
+        min_turnover: float | None,
+        page: int,
+        page_size: int,
+        sort_by: ScreenSortBy,
+        sort_order: ScreenSortOrder,
+    ) -> tuple[list[tuple[Instrument, DailyPrice]], int, str | None]:
+        """Filter and paginate one common valid market session in SQL."""
 
     @abstractmethod
     def get_intraday_by_symbol(self, symbol: str) -> list[LiveQuote]:
@@ -233,6 +258,79 @@ class PostgresDailyPriceRepository(DailyPriceRepository):
                 )
             )
         return query.order_by(Instrument.symbol.asc()).all()
+
+    def screen_latest_instrument_prices(
+        self,
+        *,
+        query: str | None,
+        sector: str | None,
+        min_price: float | None,
+        max_price: float | None,
+        min_change_percent: float | None,
+        max_change_percent: float | None,
+        min_volume: int | None,
+        min_turnover: float | None,
+        page: int,
+        page_size: int,
+        sort_by: ScreenSortBy,
+        sort_order: ScreenSortOrder,
+    ) -> tuple[list[tuple[Instrument, DailyPrice]], int, str | None]:
+        session_date = self.get_common_session_date("EQUITY")
+        if session_date is None:
+            return [], 0, None
+
+        statement = (
+            self._session.query(Instrument, DailyPrice)
+            .join(DailyPrice, DailyPrice.symbol == Instrument.symbol)
+            .filter(
+                Instrument.security_type == "EQUITY",
+                DailyPrice.date == session_date,
+                DailyPrice.is_ohlc_valid.is_(True),
+            )
+        )
+        if query:
+            term = query.strip().lower()
+            statement = statement.filter(
+                or_(
+                    func.lower(Instrument.symbol).contains(term, autoescape=True),
+                    func.lower(Instrument.company_name).contains(term, autoescape=True),
+                )
+            )
+        if sector:
+            statement = statement.filter(func.lower(Instrument.sector) == sector.strip().lower())
+        if min_price is not None:
+            statement = statement.filter(DailyPrice.close >= min_price)
+        if max_price is not None:
+            statement = statement.filter(DailyPrice.close <= max_price)
+        if min_change_percent is not None:
+            statement = statement.filter(DailyPrice.change_percent >= min_change_percent)
+        if max_change_percent is not None:
+            statement = statement.filter(DailyPrice.change_percent <= max_change_percent)
+        if min_volume is not None:
+            statement = statement.filter(DailyPrice.volume >= min_volume)
+        if min_turnover is not None:
+            statement = statement.filter(DailyPrice.turnover >= min_turnover)
+
+        total = statement.order_by(None).count()
+        sort_column = {
+            "symbol": Instrument.symbol,
+            "price": DailyPrice.close,
+            "change_percent": DailyPrice.change_percent,
+            "volume": DailyPrice.volume,
+            "turnover": DailyPrice.turnover,
+        }[sort_by]
+        primary = (
+            sort_column.desc().nullslast()
+            if sort_order == "desc"
+            else sort_column.asc().nullslast()
+        )
+        rows = (
+            statement.order_by(primary, Instrument.symbol.asc())
+            .offset((page - 1) * page_size)
+            .limit(page_size)
+            .all()
+        )
+        return rows, total, session_date
 
     def get_intraday_by_symbol(self, symbol: str) -> list[LiveQuote]:
         return (

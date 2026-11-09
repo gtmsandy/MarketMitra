@@ -1,5 +1,7 @@
 from datetime import datetime
 
+from typing import Literal
+
 from pydantic import BaseModel
 
 
@@ -30,6 +32,35 @@ class StockQuote(BaseModel):
     last_updated: datetime
     stock_observation_date: str | None = None
     market_snapshot_date: datetime | None = None
+    sector: str | None = None
+    turnover: float | None = None
+    data_freshness: str = "HISTORICAL"
+
+
+ScreenSortBy = Literal["symbol", "price", "change_percent", "volume", "turnover"]
+ScreenSortOrder = Literal["asc", "desc"]
+
+
+class StockScreenerItem(BaseModel):
+    symbol: str
+    company_name: str
+    sector: str | None = None
+    ltp: float | None = None
+    change_percent: float | None = None
+    volume: int | None = None
+    turnover: float | None = None
+    observation_date: str | None = None
+    data_freshness: str = "HISTORICAL"
+
+
+class StockScreenerResponse(BaseModel):
+    items: list[StockScreenerItem]
+    total: int
+    page: int
+    page_size: int
+    observation_date: str | None = None
+    observation_policy: str = "COMMON_MARKET_SESSION"
+    data_freshness: str = "HISTORICAL"
 
 
 class MarketMover(BaseModel):

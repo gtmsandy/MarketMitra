@@ -123,6 +123,19 @@ class TestPostgresStocksApi:
         symbols = {item["symbol"] for item in data}
         assert symbols == {"SYNBANKA"}
 
+    def test_screener_filters_and_paginates_postgres_data(self, postgres_client: TestClient) -> None:
+        resp = postgres_client.get(
+            "/api/v1/stocks/screener",
+            params={"sector": "Synthetic Banking", "min_price": 100, "page_size": 1, "sort_by": "price", "sort_order": "desc"},
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["total"] == 2
+        assert len(data["items"]) == 1
+        assert data["items"][0]["symbol"] == "SYNBANKB"
+        assert data["observation_policy"] == "COMMON_MARKET_SESSION"
+        assert data["observation_date"] == "2026-09-09"
+
     def test_stock_detail_known_symbol(self, postgres_client: TestClient) -> None:
         resp = postgres_client.get("/api/v1/stocks/SYNBANKA")
         assert resp.status_code == 200

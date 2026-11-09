@@ -148,3 +148,33 @@ def test_measurement_listener_is_detached_after_context_exit() -> None:
     finally:
         session.close()
         engine.dispose()
+
+
+def test_screener_query_count_is_constant_and_paginated_in_sql() -> None:
+    measurements: list[tuple[int, int, list[str]]] = []
+    for size in (2, 5, 20):
+        engine, session = _make_market(size, 1.0)
+        try:
+            with measure_sql(engine) as measurement:
+                result = PostgresMarketProvider(session).screen_stocks(
+                    query=None,
+                    sector=None,
+                    min_price=None,
+                    max_price=None,
+                    min_change_percent=None,
+                    max_change_percent=None,
+                    min_volume=None,
+                    min_turnover=None,
+                    page=1,
+                    page_size=2,
+                    sort_by="symbol",
+                    sort_order="asc",
+                )
+            measurements.append((measurement.statement_count, result.total, [item.symbol for item in result.items]))
+        finally:
+            session.close()
+            engine.dispose()
+
+    assert [total for _, total, _ in measurements] == [2, 5, 20]
+    assert [symbols for _, _, symbols in measurements] == [["SYM000", "SYM001"]] * 3
+    assert {count for count, _, _ in measurements} == {3}
