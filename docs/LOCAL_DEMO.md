@@ -12,7 +12,7 @@ root:
 
 ```powershell
 Push-Location .\backend
-.\.venv\Scripts\python.exe -c "from pathlib import Path; from dotenv import load_dotenv; load_dotenv(Path('.env.demo.local'), override=True); import uvicorn; uvicorn.run('app.main:app', host='127.0.0.1', port=8000)"
+.\.venv\Scripts\python.exe -m app.scripts.start_demo --env-file .env.demo.local --host 127.0.0.1 --port 8000
 ```
 
 ```powershell
@@ -24,6 +24,12 @@ npm.cmd run dev -- --host 127.0.0.1 --port 5173
 Open <http://127.0.0.1:5173>. Use the matching `127.0.0.1` origin for
 authenticated flows; mixing `localhost` and `127.0.0.1` intentionally does not
 share the session cookie.
+
+The startup helper loads only `backend/.env.demo.local`, performs read-only
+checks for `marketmitra_demo`, `marketmitra_demo_user`, and Alembic `0009`, and
+refuses to start if any identity differs. It prints no connection string or
+credential. After startup, verify <http://127.0.0.1:8000/api/v1/health/live>
+and <http://127.0.0.1:8000/api/v1/health/ready> before opening the frontend.
 
 ## Demo accounts
 
