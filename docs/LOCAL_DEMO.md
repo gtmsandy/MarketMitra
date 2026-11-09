@@ -11,13 +11,8 @@ Run the backend and frontend in separate PowerShell windows from the repository
 root:
 
 ```powershell
-Get-Content .\backend\.env.demo.local | ForEach-Object {
-  if ($_ -match '^([^#=]+)=(.*)$') {
-    [Environment]::SetEnvironmentVariable($Matches[1], $Matches[2], 'Process')
-  }
-}
 Push-Location .\backend
-.\.venv\Scripts\python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8000
+.\.venv\Scripts\python.exe -c "from pathlib import Path; from dotenv import load_dotenv; load_dotenv(Path('.env.demo.local'), override=True); import uvicorn; uvicorn.run('app.main:app', host='127.0.0.1', port=8000)"
 ```
 
 ```powershell
@@ -49,6 +44,19 @@ repository, an environment file, a fixture, or documentation.
 5. Sign out and confirm protected requests are rejected.
 6. Sign in as the admin and show the server-verified admin page.
 7. Sign out before closing the demo.
+
+## Watchlist walkthrough
+
+1. While signed in as the investor, open **Watchlists** and create
+   `My NEPSE Watchlist`.
+2. Search for `SYNBANKA` and `SYNBANKB`, adding both synthetic securities.
+3. Refresh the page, then sign out and sign back in to demonstrate that the
+   private list and its items persist in `marketmitra_demo`.
+4. Sign in as the admin and open Watchlists; the investor's private list must
+   not appear, demonstrating owner-scoped isolation.
+5. From a stock detail page, use **Add to watchlist** and confirm the item
+   appears in the investor list. Keep the `HISTORICAL` and synthetic labels
+   visible when discussing the data provenance.
 
 ## Troubleshooting
 
