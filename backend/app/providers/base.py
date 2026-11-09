@@ -8,6 +8,9 @@ from app.models.market import (
     MostActiveStock,
     SectorPerformance,
     StockQuote,
+    StockScreenerResponse,
+    ScreenSortBy,
+    ScreenSortOrder,
 )
 from app.models.stock import IntradayPricePoint, PriceHistoryPoint, StockDetail
 
@@ -36,6 +39,25 @@ class MarketDataProvider(ABC):
     @abstractmethod
     def search_stocks(self, query: str) -> list[StockQuote]:
         """Return stocks matching query by symbol or company name."""
+
+    @abstractmethod
+    def screen_stocks(
+        self,
+        *,
+        query: str | None,
+        sector: str | None,
+        min_price: float | None,
+        max_price: float | None,
+        min_change_percent: float | None,
+        max_change_percent: float | None,
+        min_volume: int | None,
+        min_turnover: float | None,
+        page: int,
+        page_size: int,
+        sort_by: ScreenSortBy,
+        sort_order: ScreenSortOrder,
+    ) -> StockScreenerResponse:
+        """Return a deterministic, common-session screener result."""
 
     @abstractmethod
     def get_stock_detail(self, symbol: str) -> StockDetail | None:

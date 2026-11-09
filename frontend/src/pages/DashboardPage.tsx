@@ -119,7 +119,11 @@ function DashboardPage() {
             <p className="section-heading__eyebrow">Market Overview</p>
             <h1 id="market-overview-heading">NEPSE Market Summary</h1>
           </div>
-          <p>Current values reflect latest database-backed market records.</p>
+          <p>
+            {overview.data_freshness === 'LIVE'
+              ? 'Current values reflect the latest authorized market feed.'
+              : 'Historical snapshot for the observation date shown.'}
+          </p>
         </div>
         <div className="metric-grid">
           <MarketMetricCard

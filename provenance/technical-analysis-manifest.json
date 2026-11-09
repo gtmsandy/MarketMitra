@@ -1,0 +1,38 @@
+{
+  "manifest_version": 1,
+  "datasets": [
+    {
+      "dataset_identifier": "marketmitra-synthetic-technical-analysis-v1",
+      "classification": "synthetic_demo",
+      "source": "MarketMitra project-generated deterministic technical-analysis fixture",
+      "publisher": "MarketMitra project",
+      "source_reference": "provenance/fixtures/marketmitra-synthetic-technical-analysis-v1.json",
+      "acquisition_timestamp": "2026-11-09T00:00:00Z",
+      "observation_period": {
+        "start": "2026-03-23",
+        "end": "2026-09-04",
+        "notes": "120 generated weekday sessions per symbol; the original v1 fixture is preserved separately and is not rewritten."
+      },
+      "schema_version": "1",
+      "artifact_path": "fixtures/marketmitra-synthetic-technical-analysis-v1.json",
+      "sha256": "89abb74a6b45ffda12878eb0d12b7bcb99f64135fd02ef84ff0ac286960f4698",
+      "instrument_count": 6,
+      "price_observation_count": 720,
+      "transformation_version": "technical-fixture-generator-v1",
+      "attribution_requirements": "Label as MarketMitra synthetic technical-analysis data; never represent as NEPSE data",
+      "storage_permission": "project_generated",
+      "redistribution_public_display_permission": "project_generated",
+      "license_or_contract_evidence_reference": "Project-generated fixture committed with the MarketMitra source repository",
+      "authorization_status": "approved_synthetic",
+      "publication_approved": true,
+      "generator_version": "technical-fixture-generator-v1",
+      "generation_seed": 20261109,
+      "session_count_per_instrument": 120,
+      "snapshot_count": 120,
+      "baseline_fixture_identifier": "marketmitra-synthetic-staging-v1",
+      "baseline_fixture_sha256": "7635e81de720d23573b571d3ccb862d5954672099509901b2da3bcb7dd9a537f",
+      "preserved_observation_count": 24,
+      "data_limitations": "Synthetic prices are for engineering demonstrations only; weekday generation does not model official NEPSE holidays or live market behavior."
+    }
+  ]
+}

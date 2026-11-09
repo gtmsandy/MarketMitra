@@ -8,6 +8,12 @@ import MarketMoversPage from './pages/MarketMoversPage'
 import SectorPerformancePage from './pages/SectorPerformancePage'
 import MarketHeatmapPage from './pages/MarketHeatmapPage'
 import NotFoundPage from './pages/NotFoundPage'
+import LoginPage from './pages/LoginPage'
+import RegisterPage from './pages/RegisterPage'
+import ProfilePage from './pages/ProfilePage'
+import AdminPage from './pages/AdminPage'
+import WatchlistsPage from './pages/WatchlistsPage'
+import ScreenerPage from './pages/ScreenerPage'
 import { getMarketOverview } from './api/market'
 import type { MarketOverview } from './types/market'
 
@@ -30,6 +36,12 @@ function App() {
           <Route path="/market/sectors" element={<SectorPerformancePage />} />
           <Route path="/market/heatmap" element={<MarketHeatmapPage />} />
           <Route path="/stocks/:symbol" element={<StockDetailPage />} />
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/register" element={<RegisterPage />} />
+          <Route path="/profile" element={<ProfilePage />} />
+          <Route path="/watchlists" element={<WatchlistsPage />} />
+          <Route path="/screener" element={<ScreenerPage />} />
+          <Route path="/admin" element={<AdminPage />} />
           <Route path="*" element={<NotFoundPage />} />
         </Routes>
       </div>

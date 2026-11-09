@@ -6,6 +6,9 @@ from app.models.market import (
     MostActiveStock,
     SectorPerformance,
     StockQuote,
+    StockScreenerResponse,
+    ScreenSortBy,
+    ScreenSortOrder,
 )
 from app.models.stock import IntradayPricePoint, PriceHistoryPoint, StockDetail
 from app.providers.base import MarketDataProvider
@@ -49,6 +52,37 @@ class MarketService:
 
     def search_stocks(self, query: str) -> list[StockQuote]:
         return self._provider.search_stocks(query)
+
+    def screen_stocks(
+        self,
+        *,
+        q: str | None,
+        sector: str | None,
+        min_price: float | None,
+        max_price: float | None,
+        min_change_percent: float | None,
+        max_change_percent: float | None,
+        min_volume: int | None,
+        min_turnover: float | None,
+        page: int,
+        page_size: int,
+        sort_by: ScreenSortBy,
+        sort_order: ScreenSortOrder,
+    ) -> StockScreenerResponse:
+        return self._provider.screen_stocks(
+            query=q,
+            sector=sector,
+            min_price=min_price,
+            max_price=max_price,
+            min_change_percent=min_change_percent,
+            max_change_percent=max_change_percent,
+            min_volume=min_volume,
+            min_turnover=min_turnover,
+            page=page,
+            page_size=page_size,
+            sort_by=sort_by,
+            sort_order=sort_order,
+        )
 
     def get_stock_detail(self, symbol: str) -> StockDetail | None:
         detail = self._provider.get_stock_detail(symbol)

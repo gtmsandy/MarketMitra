@@ -45,6 +45,31 @@ export type StockQuote = {
   market_snapshot_date?: string | null
 }
 
+export type ScreenerSortBy = 'symbol' | 'price' | 'change_percent' | 'volume' | 'turnover'
+export type ScreenerSortOrder = 'asc' | 'desc'
+
+export type StockScreenerItem = {
+  symbol: string
+  company_name: string
+  sector: string | null
+  ltp: number
+  change_percent: number
+  volume: number
+  turnover: number | null
+  observation_date: string | null
+  data_freshness: string
+}
+
+export type StockScreenerResponse = {
+  items: StockScreenerItem[]
+  total: number
+  page: number
+  page_size: number
+  observation_date: string | null
+  observation_policy: string
+  data_freshness: string
+}
+
 export type PriceHistoryPoint = {
   date: string
   open: number
@@ -82,6 +107,7 @@ export type StockDetail = {
   fifty_two_week_low: number
   stock_observation_date?: string | null
   market_snapshot_date?: string | null
+  data_freshness?: string
 }
 
 export type MarketBreadth = {

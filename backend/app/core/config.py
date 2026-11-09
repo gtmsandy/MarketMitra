@@ -53,6 +53,14 @@ def get_http_rate_limit() -> tuple[int, int, int]:
     )
 
 
+def get_auth_rate_limit() -> tuple[int, int, int]:
+    return (
+        _bounded_integer("AUTH_RATE_LIMIT_REQUESTS", 10, 1, 1_000),
+        _bounded_integer("AUTH_RATE_LIMIT_WINDOW_SECONDS", 900, 1, 86_400),
+        _bounded_integer("AUTH_RATE_LIMIT_MAX_CLIENTS", 10_000, 1, 100_000),
+    )
+
+
 def get_websocket_connection_limit() -> int:
     return _bounded_integer("WEBSOCKET_MAX_CONNECTIONS", 100, 1, 10_000)
 

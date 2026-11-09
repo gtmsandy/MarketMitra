@@ -9,6 +9,10 @@ from app.models.market import (
     MostActiveStock,
     SectorPerformance,
     StockQuote,
+    StockScreenerItem,
+    StockScreenerResponse,
+    ScreenSortBy,
+    ScreenSortOrder,
 )
 from app.models.stock import IntradayPricePoint, PriceHistoryPoint, StockDetail
 from app.providers.base import MarketDataProvider
@@ -113,6 +117,56 @@ class PostgresMarketProvider(MarketDataProvider):
             return self.get_stocks()
         term = query.strip().lower()
         return self._get_stock_quotes(term)
+
+    def screen_stocks(
+        self,
+        *,
+        query: str | None,
+        sector: str | None,
+        min_price: float | None,
+        max_price: float | None,
+        min_change_percent: float | None,
+        max_change_percent: float | None,
+        min_volume: int | None,
+        min_turnover: float | None,
+        page: int,
+        page_size: int,
+        sort_by: ScreenSortBy,
+        sort_order: ScreenSortOrder,
+    ) -> StockScreenerResponse:
+        rows, total, session_date = self._prices.screen_latest_instrument_prices(
+            query=query,
+            sector=sector,
+            min_price=min_price,
+            max_price=max_price,
+            min_change_percent=min_change_percent,
+            max_change_percent=max_change_percent,
+            min_volume=min_volume,
+            min_turnover=min_turnover,
+            page=page,
+            page_size=page_size,
+            sort_by=sort_by,
+            sort_order=sort_order,
+        )
+        return StockScreenerResponse(
+            items=[
+                StockScreenerItem(
+                    symbol=instrument.symbol,
+                    company_name=instrument.company_name,
+                    sector=instrument.sector,
+                    ltp=price.close,
+                    change_percent=price.change_percent,
+                    volume=price.volume,
+                    turnover=price.turnover,
+                    observation_date=price.date,
+                )
+                for instrument, price in rows
+            ],
+            total=total,
+            page=page,
+            page_size=page_size,
+            observation_date=session_date,
+        )
 
     # ------------------------------------------------------------------
     # Stock detail and history
@@ -258,4 +312,6 @@ class PostgresMarketProvider(MarketDataProvider):
             last_updated=last_updated,
             stock_observation_date=price.date,
             market_snapshot_date=snapshot_timestamp,
+            sector=instrument.sector,
+            turnover=price.turnover,
         )
