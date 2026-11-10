@@ -33,6 +33,10 @@ class RegistrationUnavailable(Exception):
     """The requested identity cannot be registered."""
 
 
+class IdentityMaintenanceUnavailable(Exception):
+    """The requested offline identity maintenance operation cannot be completed."""
+
+
 @dataclass(frozen=True)
 class SessionGrant:
     user: User
@@ -297,6 +301,41 @@ def update_profile(session: Session, grant: SessionGrant, display_name: str) -> 
         identity_session=grant.session,
     )
     return grant.user
+
+
+def reset_identity_password(
+    session: Session, *, email: str, password: str
+) -> tuple[User, int]:
+    """Replace one password and revoke its sessions in the caller's transaction."""
+    replacement_hash = hash_password(password)
+    user = session.scalar(
+        select(User).where(User.email == email).with_for_update()
+    )
+    if user is None:
+        raise IdentityMaintenanceUnavailable
+
+    now = _now()
+    active_sessions = session.scalars(
+        select(UserSession)
+        .where(
+            UserSession.user_id == user.id,
+            UserSession.revoked_at.is_(None),
+        )
+        .with_for_update()
+    ).all()
+    for active_session in active_sessions:
+        _revoke(active_session, now, "OFFLINE_PASSWORD_RESET")
+
+    user.password_hash = replacement_hash
+    user.password_changed_at = now
+    user.updated_at = now
+    _audit(
+        session,
+        "IDENTITY_PASSWORD_RESET",
+        "SUCCESS",
+        target_user=user,
+    )
+    return user, len(active_sessions)
 
 
 def provision_admin(
