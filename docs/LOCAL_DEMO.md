@@ -26,7 +26,7 @@ authenticated flows; mixing `localhost` and `127.0.0.1` intentionally does not
 share the session cookie.
 
 The startup helper loads only `backend/.env.demo.local`, performs read-only
-checks for `marketmitra_demo`, `marketmitra_demo_user`, and Alembic `0009`, and
+checks for `marketmitra_demo`, `marketmitra_demo_user`, and Alembic `0010`, and
 refuses to start if any identity differs. It prints no connection string or
 credential. After startup, verify <http://127.0.0.1:8000/api/v1/health/live>
 and <http://127.0.0.1:8000/api/v1/health/ready> before opening the frontend.
@@ -64,6 +64,29 @@ repository, an environment file, a fixture, or documentation.
    appears in the investor list. Keep the `HISTORICAL` and synthetic labels
    visible when discussing the data provenance.
 
+## Portfolio walkthrough
+
+1. Sign in as `investor@marketmitra.test`, open **Portfolio**, and create or
+   select `MarketMitra Demo Portfolio`.
+2. Record the following hypothetical SYNBANKA transactions with unique
+   idempotency keys: buy 10 at NPR 100 with NPR 5 fees on 2026-09-06; buy 5 at
+   NPR 110 with NPR 5 fees on 2026-09-07; and sell 4 at NPR 120 with NPR 2 fees
+   on 2026-09-08.
+3. Explain that buy fees are capitalized. The NPR 1,560 acquisition cost over
+   15 shares produces a weighted-average cost of NPR 104. The sale removes NPR
+   416 of cost and realizes NPR 62 after its fee, leaving 11 shares with NPR
+   1,144 carrying cost.
+4. Show realized and unrealized P&L, the actual price-observation date, and the
+   `synthetic` / `historical` provenance labels. Do not describe the valuation
+   as current market data.
+5. Refresh, then sign out and back in to demonstrate persistence. Sign in as a
+   different account and confirm the investor portfolio is not visible; ADMIN
+   status does not bypass portfolio ownership.
+
+The demo fixture contains only historical synthetic observations. A missing or
+stale price must produce an incomplete valuation rather than a fabricated
+current value.
+
 ## Troubleshooting
 
 - If database authentication fails, verify that `backend/.env.demo.local` is
@@ -73,6 +96,9 @@ repository, an environment file, a fixture, or documentation.
   `VITE_API_BASE_URL`.
 - If auth fails only on `localhost`, use matching `127.0.0.1` URLs for both
   frontend and API.
+- If a demo login is unavailable, confirm the Windows Credential Manager entry
+  `MarketMitra/demo-investor` or `MarketMitra/demo-admin` exists. Do not reset a
+  password or create a replacement account during an interview startup.
 - Check PostgreSQL with `pg_isready -h localhost -p 5432`. Do not run migrations
   or reset scripts against the existing `marketmitra` database or the demo
   database during a normal startup.
