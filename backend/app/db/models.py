@@ -1,4 +1,5 @@
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
+from decimal import Decimal
 from uuid import UUID, uuid4
 
 from sqlalchemy import (
@@ -6,6 +7,7 @@ from sqlalchemy import (
     BigInteger,
     Boolean,
     CheckConstraint,
+    Date,
     DateTime,
     Float,
     ForeignKey,
@@ -13,6 +15,7 @@ from sqlalchemy import (
     Index,
     Integer,
     LargeBinary,
+    Numeric,
     String,
     UniqueConstraint,
     Uuid,
@@ -232,6 +235,72 @@ class WatchlistItem(Base):
     __table_args__ = (
         UniqueConstraint("watchlist_id", "symbol", name="uq_watchlist_items_watchlist_symbol"),
         Index("ix_watchlist_items_watchlist_created", "watchlist_id", "created_at"),
+    )
+
+
+class Portfolio(Base):
+    """An owner-scoped, append-only investment ledger."""
+
+    __tablename__ = "portfolios"
+
+    id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
+    owner_id: Mapped[UUID] = mapped_column(
+        Uuid, ForeignKey("users.id", ondelete="RESTRICT"), nullable=False, index=True
+    )
+    name: Mapped[str] = mapped_column(String(80), nullable=False)
+    base_currency: Mapped[str] = mapped_column(String(3), nullable=False, default="NPR", server_default="NPR")
+    archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=_utc_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=_utc_now, onupdate=_utc_now)
+
+    owner: Mapped[User] = relationship("User")
+    transactions: Mapped[list["PortfolioTransaction"]] = relationship(
+        "PortfolioTransaction", back_populates="portfolio", passive_deletes=True
+    )
+
+    __table_args__ = (
+        CheckConstraint("base_currency = 'NPR'", name="ck_portfolios_base_currency"),
+        CheckConstraint("name = trim(name) and length(name) > 0", name="ck_portfolios_name"),
+        Index("ix_portfolios_owner_active", "owner_id", "archived_at"),
+        Index("uq_portfolios_owner_name_ci", "owner_id", text("lower(name)"), unique=True, sqlite_where=text("archived_at is null"), postgresql_where=text("archived_at is null")),
+    )
+
+
+class PortfolioTransaction(Base):
+    """Immutable transaction input; holdings are always derived by replay."""
+
+    __tablename__ = "portfolio_transactions"
+
+    id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
+    portfolio_id: Mapped[UUID] = mapped_column(
+        Uuid, ForeignKey("portfolios.id", ondelete="RESTRICT"), nullable=False, index=True
+    )
+    symbol: Mapped[str] = mapped_column(
+        String, ForeignKey("instruments.symbol", ondelete="RESTRICT"), nullable=False
+    )
+    side: Mapped[str] = mapped_column(String(4), nullable=False)
+    trade_date: Mapped[date] = mapped_column(Date, nullable=False)
+    trade_sequence: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    quantity: Mapped[Decimal] = mapped_column(Numeric(24, 8), nullable=False)
+    unit_price: Mapped[Decimal] = mapped_column(Numeric(24, 8), nullable=False)
+    fees: Mapped[Decimal] = mapped_column(Numeric(24, 8), nullable=False, default=Decimal("0"), server_default="0")
+    idempotency_key: Mapped[UUID] = mapped_column(Uuid, nullable=False)
+    request_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    notes: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=_utc_now)
+
+    portfolio: Mapped[Portfolio] = relationship("Portfolio", back_populates="transactions")
+    instrument: Mapped[Instrument] = relationship("Instrument")
+
+    __table_args__ = (
+        CheckConstraint("side in ('BUY', 'SELL')", name="ck_portfolio_transactions_side"),
+        CheckConstraint("trade_sequence >= 0", name="ck_portfolio_transactions_sequence"),
+        CheckConstraint("quantity > 0", name="ck_portfolio_transactions_quantity"),
+        CheckConstraint("unit_price > 0", name="ck_portfolio_transactions_unit_price"),
+        CheckConstraint("fees >= 0", name="ck_portfolio_transactions_fees"),
+        UniqueConstraint("portfolio_id", "idempotency_key", name="uq_portfolio_transactions_idempotency"),
+        UniqueConstraint("portfolio_id", "trade_date", "trade_sequence", name="uq_portfolio_transactions_order"),
+        Index("ix_portfolio_transactions_portfolio_order", "portfolio_id", "trade_date", "trade_sequence"),
     )
 
 

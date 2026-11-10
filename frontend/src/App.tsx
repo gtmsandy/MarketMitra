@@ -14,6 +14,7 @@ import ProfilePage from './pages/ProfilePage'
 import AdminPage from './pages/AdminPage'
 import WatchlistsPage from './pages/WatchlistsPage'
 import ScreenerPage from './pages/ScreenerPage'
+import PortfolioPage from './pages/PortfolioPage'
 import { getMarketOverview } from './api/market'
 import type { MarketOverview } from './types/market'
 
@@ -40,6 +41,7 @@ function App() {
           <Route path="/register" element={<RegisterPage />} />
           <Route path="/profile" element={<ProfilePage />} />
           <Route path="/watchlists" element={<WatchlistsPage />} />
+          <Route path="/portfolio" element={<PortfolioPage />} />
           <Route path="/screener" element={<ScreenerPage />} />
           <Route path="/admin" element={<AdminPage />} />
           <Route path="*" element={<NotFoundPage />} />
