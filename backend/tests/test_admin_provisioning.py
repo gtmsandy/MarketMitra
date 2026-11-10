@@ -9,7 +9,12 @@ from app.db.base import Base
 from app.db.models import SecurityAuditEvent, User, UserSession
 from app.identity.security import verify_password
 from app.identity.service import RegistrationUnavailable, provision_admin
-from app.scripts.provision_admin import run
+from app.scripts.provision_admin import EXPECTED_ALEMBIC_HEAD, run
+from app.scripts.start_demo import EXPECTED_ALEMBIC_HEAD as DEMO_ALEMBIC_HEAD
+
+
+def test_offline_admin_and_demo_guards_track_the_repository_migration_head() -> None:
+    assert EXPECTED_ALEMBIC_HEAD == DEMO_ALEMBIC_HEAD == "0010"
 
 
 @pytest.fixture

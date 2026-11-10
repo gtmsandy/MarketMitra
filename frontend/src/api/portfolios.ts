@@ -3,10 +3,16 @@ import { AuthRequestError } from './auth'
 
 export type Portfolio = { id: string; name: string; base_currency: string; archived_at: string | null; created_at: string; updated_at: string }
 export type PortfolioTransaction = { id: string; portfolio_id: string; symbol: string; side: 'BUY' | 'SELL'; trade_date: string; trade_sequence: number; quantity: string; unit_price: string; fees: string; idempotency_key: string; notes: string | null; created_at: string }
-export type PortfolioSummary = { holdings: { symbol: string; quantity: string; average_cost: string; invested_cost: string; realized_pnl: string }[]; cash_flow_cost: string; market_value: string | null; unrealized_pnl: string | null; realized_pnl: string; total_pnl: string | null; return_percent: string | null; valuation: { as_of: string; source: string; freshness: string; complete: boolean; missing_symbols: string[]; stale_symbols: string[] } }
+export type PortfolioSummary = { holdings: { symbol: string; quantity: string; average_cost: string; invested_cost: string; realized_pnl: string }[]; cash_flow_cost: string; market_value: string | null; unrealized_pnl: string | null; realized_pnl: string; total_pnl: string | null; return_percent: string | null; valuation: { as_of: string; source: string; freshness: string; observed_on_by_symbol: Record<string, string>; complete: boolean; missing_symbols: string[]; stale_symbols: string[] } }
 
 async function request<T>(path: string, csrfToken: string | null, init: RequestInit = {}): Promise<T> {
-  const response = await fetch(`${apiBaseUrl}${path}`, { ...init, credentials: 'include', headers: { ...(init.body ? { 'Content-Type': 'application/json' } : {}), ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}), ...init.headers } })
+  let response: Response
+  try {
+    response = await fetch(`${apiBaseUrl}${path}`, { ...init, credentials: 'include', signal: AbortSignal.timeout(10_000), headers: { ...(init.body ? { 'Content-Type': 'application/json' } : {}), ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}), ...init.headers } })
+  } catch (caught) {
+    if (caught instanceof DOMException && caught.name === 'TimeoutError') throw new Error('Portfolio request timed out')
+    throw caught
+  }
   if (!response.ok) {
     const payload = await response.json().catch(() => null) as { detail?: string; error?: { message?: string; code?: string } } | null
     throw new AuthRequestError(response.status, payload?.error?.code ?? 'REQUEST_FAILED', payload?.error?.message ?? payload?.detail ?? 'Portfolio request failed')

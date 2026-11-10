@@ -87,6 +87,7 @@ class ValuationResponse(BaseModel):
     as_of: date
     source: str
     freshness: str
+    observed_on_by_symbol: dict[str, date]
     complete: bool
     missing_symbols: list[str]
     stale_symbols: list[str]

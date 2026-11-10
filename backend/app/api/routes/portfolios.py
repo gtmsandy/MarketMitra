@@ -150,7 +150,7 @@ def summary(portfolio_id: UUID, identity: CurrentIdentity, session: IdentitySess
             holdings=[HoldingResponse(symbol=h.symbol, quantity=h.quantity, average_cost=h.average_cost, invested_cost=h.carrying_cost, realized_pnl=result.realized_pnl) for h in state.holdings.values() if h.quantity > 0],
             cash_flow_cost=result.carrying_cost, market_value=result.market_value, unrealized_pnl=result.unrealized_pnl,
             realized_pnl=result.realized_pnl, total_pnl=result.total_pnl, return_percent=result.return_percent,
-            valuation=ValuationResponse(as_of=valuation_date, source="synthetic", freshness="historical", complete=result.valuation_status == "complete", missing_symbols=list(result.missing_symbols), stale_symbols=list(result.stale_symbols)),
+            valuation=ValuationResponse(as_of=valuation_date, source="synthetic", freshness="historical", observed_on_by_symbol={symbol: observation.observed_on for symbol, observation in valuations.items()}, complete=result.valuation_status == "complete", missing_symbols=list(result.missing_symbols), stale_symbols=list(result.stale_symbols)),
         )
     except (NotFoundError, ValidationError) as exc:
         raise _error(exc) from exc

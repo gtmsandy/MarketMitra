@@ -15,7 +15,7 @@ from app.identity.security import validate_password
 from app.identity.service import RegistrationUnavailable, provision_admin
 from app.models.identity import normalize_display_name, normalize_email
 
-EXPECTED_ALEMBIC_HEAD = "0008"
+EXPECTED_ALEMBIC_HEAD = "0010"
 
 
 def _parser() -> argparse.ArgumentParser:

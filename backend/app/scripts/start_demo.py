@@ -13,7 +13,7 @@ from sqlalchemy.engine import URL, make_url
 
 EXPECTED_DATABASE = "marketmitra_demo"
 EXPECTED_ROLE = "marketmitra_demo_user"
-EXPECTED_ALEMBIC_HEAD = "0009"
+EXPECTED_ALEMBIC_HEAD = "0010"
 
 
 @dataclass(frozen=True)
