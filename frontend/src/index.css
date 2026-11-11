@@ -97,6 +97,7 @@ button {
 .profile-details dd { margin: 0; overflow-wrap: anywhere; font-weight: 650; }
 
 .watchlists-layout { display: grid; grid-template-columns: minmax(220px, 280px) 1fr; gap: var(--space-5); align-items: start; }
+.watchlists-layout > * { min-width: 0; }
 .watchlists-sidebar, .watchlist-detail { padding: var(--space-5); }
 .watchlist-tabs { display: grid; gap: var(--space-2); margin: var(--space-4) 0; }
 .watchlist-tab { padding: 10px var(--space-3); border: 1px solid transparent; border-radius: var(--radius-control); color: var(--color-text-secondary); background: transparent; text-align: left; }
@@ -110,6 +111,7 @@ button {
 .watchlist-search-results li { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); padding: var(--space-3); border: 1px solid var(--color-border); border-radius: var(--radius-control); }
 .watchlist-search-results .secondary-button { padding: 6px 12px; }
 .screener-page { display: grid; gap: var(--space-5); }
+.screener-page > * { min-width: 0; }
 .screener-filters, .screener-results { padding: var(--space-5); }
 .screener-reset { width: auto; margin-top: 0; }
 .screener-filter-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--space-3); }
@@ -133,6 +135,8 @@ button {
 }
 
 @media (max-width: 480px) {
+  .app-header__account { min-width: 0; white-space: normal; }
+  .app-header__account a { min-width: 0; overflow-wrap: anywhere; }
   .screener-filter-grid { grid-template-columns: 1fr; }
   .screener-filters, .screener-results { padding: var(--space-3); }
   .screener-pagination { align-items: flex-start; flex-direction: column; }

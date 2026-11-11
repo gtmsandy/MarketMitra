@@ -87,6 +87,47 @@ The demo fixture contains only historical synthetic observations. A missing or
 stale price must produce an incomplete valuation rather than a fabricated
 current value.
 
+## Technical-analysis walkthrough
+
+1. Open a synthetic stock detail page and keep the `Synthetic` and `Historical`
+   provenance labels visible.
+2. Switch between `1D`, `1W`, `1M`, `1Y`, and `ALL`; compare line and
+   candlestick views and toggle volume, SMA, EMA, Bollinger Bands, RSI, and
+   MACD.
+3. Explain that the committed fixture contains 120 weekday sessions per
+   fictional instrument (720 prices and 120 snapshots) and that indicators
+   intentionally show warm-up messages when the selected range is too short.
+4. The fixture SHA-256 is
+   `89abb74a6b45ffda12878eb0d12b7bcb99f64135fd02ef84ff0ac286960f4698`.
+   It is validated by the repository tests and must never be described as
+   genuine NEPSE data.
+
+## Interview questions to rehearse
+
+- **Why a provider interface?** It keeps React and API contracts independent of
+  a licensed market-data source and makes replay fixtures testable.
+- **How is portfolio correctness protected?** Transactions are append-only,
+  replayed in date/sequence order with Decimal values, and guarded by
+  owner-scoped authorization plus concurrency-safe writes.
+- **Why is the portfolio valuation incomplete?** The latest observation is
+  historical/stale, so the holding-level historical difference (NPR 11) is
+  visible while aggregate market and unrealized totals remain unavailable
+  instead of being presented as live data.
+- **How is synthetic data made safe?** The fixture is deterministic, validated
+  against OHLCV constraints, tied to a versioned SHA-256 manifest, and labelled
+  in the UI.
+- **What is intentionally out of scope?** Live NEPSE publication, brokerage
+  integration, deployment, and cloud infrastructure.
+
+## Resume evidence
+
+- FastAPI + React market-research workspace with PostgreSQL identity/RBAC,
+  owner-scoped watchlists, a historical screener, and technical indicators.
+- Immutable Decimal portfolio ledger with weighted-average cost, fees-aware
+  realized P&L, deterministic replay, and concurrency protection.
+- Reproducible synthetic-data pipeline with provenance manifests, SHA-256
+  verification, idempotent ingestion, and five-job CI quality gates.
+
 ## Troubleshooting
 
 - If database authentication fails, verify that `backend/.env.demo.local` is
