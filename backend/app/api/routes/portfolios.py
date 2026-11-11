@@ -1,11 +1,14 @@
 from datetime import date
+from decimal import Decimal, ROUND_HALF_UP
 from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Request, Response, status
 from fastapi.responses import JSONResponse
+from sqlalchemy import select
 
 from app.api.dependencies import IdentitySession
 from app.api.routes.auth import _authenticated_mutation
+from app.db.models import Instrument
 from app.identity.access import CurrentIdentity
 from app.models.portfolio import (
     HoldingResponse,
@@ -34,6 +37,7 @@ from app.services.portfolio_service import (
 
 
 router = APIRouter(prefix="/portfolios", tags=["portfolios"])
+_MONEY_QUANTUM = Decimal("0.00000001")
 
 
 def _error(exc: PortfolioError) -> HTTPException:
@@ -49,6 +53,24 @@ def _mutation(request: Request, session: IdentitySession):
     if isinstance(grant, JSONResponse):
         return grant
     return None
+
+
+def _holding_responses(session: IdentitySession, state, valuations) -> list[HoldingResponse]:
+    active = [holding for holding in state.holdings.values() if holding.quantity > 0]
+    names = dict(session.execute(select(Instrument.symbol, Instrument.company_name).where(Instrument.symbol.in_([holding.symbol for holding in active]))).all())
+    responses: list[HoldingResponse] = []
+    for holding in active:
+        observation = valuations.get(holding.symbol)
+        unrealized = None if observation is None else (holding.quantity * observation.price - holding.carrying_cost).quantize(_MONEY_QUANTUM, rounding=ROUND_HALF_UP)
+        responses.append(HoldingResponse(
+            symbol=holding.symbol, company_name=names[holding.symbol], quantity=holding.quantity,
+            average_cost=holding.average_cost, invested_cost=holding.carrying_cost,
+            realized_pnl=state.realized_pnl,
+            valuation_price=None if observation is None else observation.price,
+            valuation_observed_on=None if observation is None else observation.observed_on,
+            unrealized_pnl=unrealized,
+        ))
+    return responses
 
 
 @router.post("", response_model=PortfolioResponse, status_code=201)
@@ -135,8 +157,8 @@ def transactions(portfolio_id: UUID, identity: CurrentIdentity, session: Identit
 @router.get("/{portfolio_id}/holdings", response_model=list[HoldingResponse])
 def holdings(portfolio_id: UUID, identity: CurrentIdentity, session: IdentitySession, as_of: date | None = None):
     try:
-        state, _, _ = holdings_and_summary(session, identity.user.id, portfolio_id, as_of or date.today())
-        return [HoldingResponse(symbol=h.symbol, quantity=h.quantity, average_cost=h.average_cost, invested_cost=h.carrying_cost, realized_pnl=state.realized_pnl) for h in state.holdings.values() if h.quantity > 0]
+        state, _, valuations = holdings_and_summary(session, identity.user.id, portfolio_id, as_of or date.today())
+        return _holding_responses(session, state, valuations)
     except (NotFoundError, ValidationError) as exc:
         raise _error(exc) from exc
 
@@ -147,8 +169,9 @@ def summary(portfolio_id: UUID, identity: CurrentIdentity, session: IdentitySess
         state, result, valuations = holdings_and_summary(session, identity.user.id, portfolio_id, as_of or date.today())
         valuation_date = as_of or date.today()
         return PortfolioSummaryResponse(
-            holdings=[HoldingResponse(symbol=h.symbol, quantity=h.quantity, average_cost=h.average_cost, invested_cost=h.carrying_cost, realized_pnl=result.realized_pnl) for h in state.holdings.values() if h.quantity > 0],
-            cash_flow_cost=result.carrying_cost, market_value=result.market_value, unrealized_pnl=result.unrealized_pnl,
+            holdings=_holding_responses(session, state, valuations),
+            total_acquisition_cost=state.total_buy_cost, cash_flow_cost=result.carrying_cost,
+            market_value=result.market_value, unrealized_pnl=result.unrealized_pnl,
             realized_pnl=result.realized_pnl, total_pnl=result.total_pnl, return_percent=result.return_percent,
             valuation=ValuationResponse(as_of=valuation_date, source="synthetic", freshness="historical", observed_on_by_symbol={symbol: observation.observed_on for symbol, observation in valuations.items()}, complete=result.valuation_status == "complete", missing_symbols=list(result.missing_symbols), stale_symbols=list(result.stale_symbols)),
         )

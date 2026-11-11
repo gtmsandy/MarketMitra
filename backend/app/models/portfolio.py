@@ -77,10 +77,14 @@ class TransactionResponse(BaseModel):
 
 class HoldingResponse(BaseModel):
     symbol: str
+    company_name: str
     quantity: Decimal
     average_cost: Decimal
     invested_cost: Decimal
     realized_pnl: Decimal
+    valuation_price: Decimal | None
+    valuation_observed_on: date | None
+    unrealized_pnl: Decimal | None
 
 
 class ValuationResponse(BaseModel):
@@ -95,6 +99,7 @@ class ValuationResponse(BaseModel):
 
 class PortfolioSummaryResponse(BaseModel):
     holdings: list[HoldingResponse]
+    total_acquisition_cost: Decimal
     cash_flow_cost: Decimal
     market_value: Decimal | None
     unrealized_pnl: Decimal | None

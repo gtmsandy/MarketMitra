@@ -2,7 +2,7 @@ from datetime import date, datetime, timezone
 from decimal import Decimal
 from uuid import uuid4
 
-from app.db.models import Instrument
+from app.db.models import DailyPrice, Instrument
 
 
 def _register(client, email: str):
@@ -14,6 +14,12 @@ def _register(client, email: str):
 def _seed_instrument(factory, symbol="SYNBANKA"):
     with factory() as session:
         session.add(Instrument(symbol=symbol, company_name="Synthetic Bank", sector="Banks", created_at=datetime.now(timezone.utc)))
+        session.commit()
+
+
+def _seed_price(factory, symbol="SYNBANKA", close=105):
+    with factory() as session:
+        session.add(DailyPrice(symbol=symbol, date=str(date.today()), open=100, high=106, low=99, close=close, volume=100, turnover=10_500, previous_close=100))
         session.commit()
 
 
@@ -44,6 +50,7 @@ def test_portfolio_isolation_rejects_other_user(identity_client, identity_sessio
 def test_transaction_idempotency_and_summary(identity_client, identity_session_factory):
     csrf = _register(identity_client, "trader@example.test")
     _seed_instrument(identity_session_factory)
+    _seed_price(identity_session_factory)
     headers = {"Origin": "http://localhost:5173", "X-CSRF-Token": csrf}
     portfolio = identity_client.post("/api/v1/portfolios", headers=headers, json={"name": "Trading"}).json()
     key = str(uuid4())
@@ -57,7 +64,19 @@ def test_transaction_idempotency_and_summary(identity_client, identity_session_f
     assert conflict.status_code == 409
     summary = identity_client.get(f"/api/v1/portfolios/{portfolio['id']}/summary")
     assert summary.status_code == 200
-    assert summary.json()["holdings"][0]["quantity"] == "2.00000000"
+    payload = summary.json()
+    assert payload["total_acquisition_cost"] == "201.00000000"
+    assert payload["holdings"][0] == {
+        "symbol": "SYNBANKA",
+        "company_name": "Synthetic Bank",
+        "quantity": "2.00000000",
+        "average_cost": "100.50000000",
+        "invested_cost": "201.00000000",
+        "realized_pnl": "0E-8",
+        "valuation_price": "105.00000000",
+        "valuation_observed_on": str(date.today()),
+        "unrealized_pnl": "9.00000000",
+    }
 
 
 def test_future_trade_and_oversell_rejected(identity_client, identity_session_factory):
