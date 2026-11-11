@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import date
-from decimal import Decimal
+from decimal import Decimal, ROUND_HALF_UP
 import hashlib
 import json
 from uuid import UUID, uuid4
@@ -165,6 +165,8 @@ def transaction_to_dict(row: PortfolioTransaction) -> dict[str, object]:
     return {
         "id": row.id, "portfolio_id": row.portfolio_id, "symbol": row.symbol, "side": row.side,
         "trade_date": row.trade_date, "trade_sequence": row.trade_sequence, "quantity": row.quantity,
-        "unit_price": row.unit_price, "fees": row.fees, "idempotency_key": row.idempotency_key,
+        "unit_price": row.unit_price, "fees": row.fees,
+        "gross_value": (Decimal(row.quantity) * Decimal(row.unit_price)).quantize(Decimal("0.00000001"), rounding=ROUND_HALF_UP),
+        "idempotency_key": row.idempotency_key,
         "notes": row.notes, "created_at": row.created_at,
     }

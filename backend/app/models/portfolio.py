@@ -70,6 +70,7 @@ class TransactionResponse(BaseModel):
     quantity: Decimal
     unit_price: Decimal
     fees: Decimal
+    gross_value: Decimal
     idempotency_key: UUID
     notes: str | None
     created_at: datetime

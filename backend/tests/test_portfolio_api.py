@@ -57,6 +57,7 @@ def test_transaction_idempotency_and_summary(identity_client, identity_session_f
     payload = {"idempotency_key": key, "symbol": "SYNBANKA", "side": "BUY", "trade_date": str(date.today()), "quantity": "2", "unit_price": "100", "fees": "1"}
     first = identity_client.post(f"/api/v1/portfolios/{portfolio['id']}/transactions", headers=headers, json=payload)
     assert first.status_code == 201
+    assert first.json()["gross_value"] == "200.00000000"
     replay = identity_client.post(f"/api/v1/portfolios/{portfolio['id']}/transactions", headers=headers, json=payload)
     assert replay.status_code == 200
     assert replay.json()["id"] == first.json()["id"]
