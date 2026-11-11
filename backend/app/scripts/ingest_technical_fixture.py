@@ -1,4 +1,4 @@
-"""Safely preflight or ingest the extended fixture into a disposable *_ci database."""
+"""Safely preflight or ingest the extended fixture into an allowlisted disposable database."""
 
 from __future__ import annotations
 
@@ -7,7 +7,6 @@ from dataclasses import dataclass
 import os
 from pathlib import Path
 from math import isclose
-import re
 
 from sqlalchemy import text
 from sqlalchemy.engine import Engine, make_url
@@ -19,7 +18,7 @@ from app.ingestion.service import IngestionService
 from app.ingestion.sources.technical_fixture import TechnicalFixture, TechnicalFixtureSource, load_technical_dataset
 from app.scripts.seed_staging_data import verify_migrated_schema
 
-_CI_DATABASE = re.compile(r"^[a-z0-9][a-z0-9_]*_ci$")
+_DISPOSABLE_DATABASES = frozenset({"marketmitra_ci", "marketmitra_fixture_ci"})
 _PROTECTED_DATABASES = {"marketmitra", "marketmitra_auth_ci", "marketmitra_demo", "postgres", "vinay_clinic"}
 
 
@@ -47,10 +46,12 @@ def validate_database_target(database_url: str, confirmation: str | None) -> str
     if (
         not url.drivername.startswith("postgresql")
         or url.host not in {"localhost", "127.0.0.1", "::1"}
-        or not _CI_DATABASE.fullmatch(database)
+        or database not in _DISPOSABLE_DATABASES
         or database in _PROTECTED_DATABASES
     ):
-        raise TechnicalIngestionError("technical fixture ingestion requires a runner-local disposable *_ci database")
+        raise TechnicalIngestionError(
+            "technical fixture ingestion requires a runner-local allowlisted disposable database"
+        )
     if confirmation != database:
         raise TechnicalIngestionError("MARKETMITRA_CONFIRM_DISPOSABLE must exactly match the database name")
     return database

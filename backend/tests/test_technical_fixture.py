@@ -58,6 +58,7 @@ def test_technical_fixture_loader_validates_weekday_ohlcv_and_provenance() -> No
     "database_url,confirmation",
     [
         ("postgresql://user:secret@127.0.0.1:5432/marketmitra_demo", "marketmitra_demo"),
+        ("postgresql://user:secret@127.0.0.1:5432/unapproved_fixture_ci", "unapproved_fixture_ci"),
         ("postgresql://user:secret@db.internal/marketmitra_ci", "marketmitra_ci"),
         ("sqlite:///marketmitra_ci", "marketmitra_ci"),
     ],
@@ -72,6 +73,13 @@ def test_technical_ingestion_accepts_confirmed_local_ci_target() -> None:
         "postgresql://user:secret@127.0.0.1:5432/marketmitra_ci",
         "marketmitra_ci",
     ) == "marketmitra_ci"
+
+
+def test_technical_ingestion_accepts_confirmed_local_fixture_ci_target() -> None:
+    assert validate_database_target(
+        "postgresql://user:secret@127.0.0.1:5432/marketmitra_fixture_ci",
+        "marketmitra_fixture_ci",
+    ) == "marketmitra_fixture_ci"
 
 
 def _seed_baseline(session: Session, fixture) -> None:
