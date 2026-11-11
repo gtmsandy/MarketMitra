@@ -67,12 +67,24 @@ function lineData(data: IndicatorValue[]) {
   return data.flatMap((point) => point.value === null ? [] : [{ time: toChartTime(point.date), value: point.value }])
 }
 
-function IndicatorPanel({ title, lines }: { title: string; lines: Array<{ data: IndicatorValue[]; color: string }> }) {
+function IndicatorPanel({ title, lines, histogram }: {
+  title: string
+  lines: Array<{ data: IndicatorValue[]; color: string }>
+  histogram?: MacdValue[]
+}) {
   const containerRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     if (!containerRef.current) return
     const chart = createChart(containerRef.current, { ...chartOptions, height: 180 })
+    if (histogram) {
+      const series = chart.addSeries(HistogramSeries, { priceFormat: { type: 'price', precision: 2, minMove: 0.01 } })
+      series.setData(histogram.flatMap((point) => point.histogram === null ? [] : [{
+        time: toChartTime(point.date),
+        value: point.histogram,
+        color: point.histogram >= 0 ? '#18794e' : '#c33c54',
+      }]))
+    }
     lines.forEach((line) => {
       const series = chart.addSeries(LineSeries, { color: line.color, lineWidth: 1 })
       series.setData(lineData(line.data))
@@ -86,7 +98,7 @@ function IndicatorPanel({ title, lines }: { title: string; lines: Array<{ data: 
       resizeObserver.disconnect()
       chart.remove()
     }
-  }, [lines])
+  }, [histogram, lines])
 
   return <section className="technical-chart-panel" aria-label={title}><h3>{title}</h3><div className="technical-chart-panel__container" ref={containerRef} /></section>
 }
@@ -159,7 +171,7 @@ function PriceChart({ data, indicators, options = defaultOptions }: PriceChartPr
     {hoverLabel && <p className="price-chart__hover" role="status">{hoverLabel}</p>}
     <div className="price-chart__container" ref={containerRef} />
     {indicators && options.showRsi && indicators.availability.rsi.available && <IndicatorPanel title="RSI" lines={[{ data: indicators.rsi, color: '#7c3aed' }]} />}
-    {indicators && options.showMacd && indicators.availability.macd.available && <IndicatorPanel title="MACD" lines={macdLines} />}
+    {indicators && options.showMacd && indicators.availability.macd.available && <IndicatorPanel title="MACD" lines={macdLines} histogram={indicators.macd} />}
   </div>
 }
 
