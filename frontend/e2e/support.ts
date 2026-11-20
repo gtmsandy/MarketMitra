@@ -8,11 +8,12 @@ export async function verifyLocalApi(request: APIRequestContext) {
   await expect(response.json()).resolves.toMatchObject({ status: 'ok' })
 }
 
-export function diagnostics(page: Page) {
+export function diagnostics(page: Page, options: { allowedStatuses?: number[] } = {}) {
   const pageErrors: string[] = []
   const consoleErrors: string[] = []
   const failedRequests: string[] = []
   const badResponses: string[] = []
+  const allowedStatuses = new Set(options.allowedStatuses ?? [])
 
   page.on('pageerror', (error) => pageErrors.push(error.message))
   page.on('console', (message) => {
@@ -26,7 +27,7 @@ export function diagnostics(page: Page) {
     const status = response.status()
     // Anonymous public pages legitimately probe protected APIs and receive 401.
     const isBrowserFaviconProbe = status === 404 && new URL(response.url()).pathname === '/favicon.ico'
-    if (status >= 500 || (status >= 400 && status !== 401 && !isBrowserFaviconProbe)) badResponses.push(`${status} ${response.request().method()} ${response.url()}`)
+    if (status >= 500 || (status >= 400 && status !== 401 && !allowedStatuses.has(status) && !isBrowserFaviconProbe)) badResponses.push(`${status} ${response.request().method()} ${response.url()}`)
   })
 
   return {
