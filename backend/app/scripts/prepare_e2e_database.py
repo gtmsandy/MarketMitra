@@ -66,7 +66,7 @@ def expected_head() -> str:
     return EXPECTED_ALEMBIC_HEAD
 
 
-def verify_target(engine: Engine, expected_database: str) -> None:
+def verify_target(engine: Engine, expected_database: str) -> tuple[str, str]:
     with engine.connect() as connection:
         row = connection.execute(
             text(
@@ -84,6 +84,7 @@ def verify_target(engine: Engine, expected_database: str) -> None:
         raise E2EPreparationError("connected database identity is not the authorized target")
     if any(attributes[:5]) or not attributes[5]:
         raise E2EPreparationError("E2E role must be a non-privileged login role")
+    return database, role
 
 
 def verify_schema(engine: Engine) -> None:
@@ -114,6 +115,30 @@ def require_empty_database(session) -> None:
     counts = _counts(session)
     if any(counts.values()):
         raise E2EPreparationError("E2E database is not empty; refusing to reset or reuse it")
+
+
+def inspect_target(*, require_schema: bool) -> dict[str, int | str]:
+    database_url, database = _database_url()
+    if require_schema:
+        expected_head()
+    from app.db.base import make_engine
+
+    engine = make_engine(database_url)
+    try:
+        actual_database, role = verify_target(engine, database)
+        if require_schema:
+            verify_schema(engine)
+        result: dict[str, int | str] = {
+            "database": actual_database,
+            "role": role,
+        }
+        if require_schema:
+            with sessionmaker(bind=engine, autocommit=False, autoflush=False)() as session:
+                counts = _counts(session)
+            result.update({name: counts[name] for name in EXPECTED_COUNTS})
+        return result
+    finally:
+        engine.dispose()
 
 
 def prepare(*, manifest_path: Path, apply: bool) -> dict[str, int | str]:
@@ -164,10 +189,18 @@ def prepare(*, manifest_path: Path, apply: bool) -> dict[str, int | str]:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--manifest", type=Path, default=Path("provenance/deployment-manifest.json"))
-    parser.add_argument("--apply", action="store_true", help="persist the approved baseline")
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument("--apply", action="store_true", help="persist the approved baseline")
+    mode.add_argument("--identity-only", action="store_true", help="perform only the target identity check")
+    mode.add_argument("--verify-only", action="store_true", help="check identity, schema, and baseline counts")
     args = parser.parse_args(argv)
     try:
-        result = prepare(manifest_path=args.manifest, apply=args.apply)
+        if args.identity_only:
+            result = inspect_target(require_schema=False)
+        elif args.verify_only:
+            result = inspect_target(require_schema=True)
+        else:
+            result = prepare(manifest_path=args.manifest, apply=args.apply)
     except Exception as exc:
         print(f"E2E DATABASE PREPARATION FAILED: {type(exc).__name__}", file=sys.stderr)
         return 2
