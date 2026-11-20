@@ -5,7 +5,10 @@ import { expect, test, type Page } from '@playwright/test'
 import { apiBaseURL, assertAccessibleSurface, assertNoHorizontalOverflow, diagnostics } from './support.js'
 
 const authEnabled = process.env.PLAYWRIGHT_AUTH_E2E === 'true'
-const databaseVerified = process.env.PLAYWRIGHT_E2E_DATABASE_NAME === 'marketmitra_e2e_ci'
+const databaseName = process.env.PLAYWRIGHT_E2E_DATABASE_NAME ?? ''
+const databaseRole = process.env.PLAYWRIGHT_E2E_DATABASE_ROLE ?? ''
+const databaseConfirmation = process.env.PLAYWRIGHT_E2E_DATABASE_CONFIRMATION ?? ''
+const databaseVerified = databaseName === 'marketmitra_e2e_ci' && databaseRole === 'marketmitra_e2e_ci_user' && databaseConfirmation === 'marketmitra_e2e_ci/marketmitra_e2e_ci_user'
 const password = process.env.PLAYWRIGHT_E2E_USER_PASSWORD ?? ''
 const adminEmail = process.env.PLAYWRIGHT_E2E_ADMIN_EMAIL ?? ''
 const adminPassword = process.env.PLAYWRIGHT_E2E_ADMIN_PASSWORD ?? ''
@@ -14,7 +17,7 @@ const tradeDate = process.env.PLAYWRIGHT_E2E_TRADE_DATE ?? new Date(Date.now() -
 test.use({ trace: 'off', screenshot: 'off', video: 'off' })
 
 test.describe.serial('authenticated disposable-database journeys', () => {
-  test.skip(!authEnabled || !databaseVerified || !password, 'Set the explicit disposable-database E2E gate and runtime credentials')
+  test.skip(!authEnabled || !databaseVerified || !password, 'Set the explicit disposable-database identity confirmation and runtime credentials')
 
   const runId = randomUUID().slice(0, 8)
   const primaryEmail = `e2e-investor-${runId}@marketmitra.test`
