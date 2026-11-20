@@ -12,12 +12,13 @@ const databaseVerified = databaseName === 'marketmitra_e2e_ci' && databaseRole =
 const password = process.env.PLAYWRIGHT_E2E_USER_PASSWORD ?? ''
 const adminEmail = process.env.PLAYWRIGHT_E2E_ADMIN_EMAIL ?? ''
 const adminPassword = process.env.PLAYWRIGHT_E2E_ADMIN_PASSWORD ?? ''
+const credentialsReady = Boolean(password && adminEmail && adminPassword)
 const tradeDate = process.env.PLAYWRIGHT_E2E_TRADE_DATE ?? new Date(Date.now() - 86_400_000).toISOString().slice(0, 10)
 
 test.use({ trace: 'off', screenshot: 'off', video: 'off' })
 
 test.describe.serial('authenticated disposable-database journeys', () => {
-  test.skip(!authEnabled || !databaseVerified || !password, 'Set the explicit disposable-database identity confirmation and runtime credentials')
+  test.skip(!authEnabled || !databaseVerified || !credentialsReady, 'Set the explicit disposable-database identity confirmation and runtime credentials')
 
   const runId = randomUUID().slice(0, 8)
   const primaryEmail = `e2e-investor-${runId}@marketmitra.test`
@@ -85,7 +86,7 @@ test.describe.serial('authenticated disposable-database journeys', () => {
     await page.goto('/admin')
     await expect(page.getByRole('heading', { name: 'Administrator access required' })).toBeVisible()
 
-    await page.context().clearCookies()
+    await page.context().addCookies([{ name: 'marketmitra_session', value: 'expired', domain: '127.0.0.1', path: '/api/v1', expires: 1 }])
     await page.goto('/profile')
     await expect(page).toHaveURL(/\/login$/)
     report.assertClean()
@@ -135,7 +136,15 @@ test.describe.serial('authenticated disposable-database journeys', () => {
     await page.getByLabel('Quantity').fill('10')
     await page.getByLabel('Unit price').fill('100')
     await page.getByLabel('Fees').fill('10')
-    await page.getByRole('button', { name: 'Record transaction' }).click()
+    await page.route('**/api/v1/portfolios/*/transactions', async (route) => {
+      if (route.request().method() === 'POST') await new Promise((resolve) => setTimeout(resolve, 250))
+      await route.continue()
+    })
+    const recordButton = page.getByRole('button', { name: 'Record transaction' })
+    const firstSubmission = recordButton.click()
+    await expect(recordButton).toBeDisabled()
+    await firstSubmission
+    await page.unroute('**/api/v1/portfolios/*/transactions')
     await expect(page.getByText('NPR 101.00')).toBeVisible()
 
     await page.getByLabel('Side').selectOption('SELL')
@@ -179,7 +188,6 @@ test.describe.serial('authenticated disposable-database journeys', () => {
   })
 
   test('verifies the pre-provisioned admin journey when credentials are supplied', async ({ page }) => {
-    test.skip(!adminEmail || !adminPassword, 'Admin credentials are intentionally supplied only at runtime')
     const report = attachDiagnostics(page)
     await login(page, primaryEmail)
     await page.getByRole('button', { name: 'Sign out' }).click()
@@ -190,6 +198,10 @@ test.describe.serial('authenticated disposable-database journeys', () => {
   })
 
   test('does not expose secrets in the page surface', async ({ page }) => {
+    await page.goto('/login')
+    await page.getByLabel('Email').focus()
+    await page.keyboard.press('Tab')
+    await expect(page.getByLabel('Password')).toBeFocused()
     await login(page, primaryEmail)
     const visibleText = await page.locator('body').innerText()
     expect(visibleText).not.toContain(password)
