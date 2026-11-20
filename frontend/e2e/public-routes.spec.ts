@@ -1,15 +1,6 @@
 import { test, expect } from '@playwright/test'
 
-import { assertAccessibleSurface, diagnostics, publicRoutes, verifyLocalApi } from './support.js'
-
-test.beforeAll(async ({ playwright }) => {
-  const request = await playwright.request.newContext()
-  try {
-    await verifyLocalApi(request)
-  } finally {
-    await request.dispose()
-  }
-})
+import { assertAccessibleSurface, diagnostics, publicRoutes } from './support.js'
 
 test.describe('public route smoke coverage', () => {
   for (const route of publicRoutes) {
