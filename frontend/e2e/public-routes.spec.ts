@@ -53,6 +53,31 @@ test('screener filters and resets without writing data', async ({ page }) => {
   observed.assertClean()
 })
 
+test('public analytics controls filter and sort deterministically', async ({ page }) => {
+  const observed = diagnostics(page)
+  await page.goto('/market/heatmap', { waitUntil: 'networkidle' })
+  const sector = page.getByLabel('Filter by sector')
+  const sectorCount = await sector.locator('option').count()
+  expect(sectorCount).toBeGreaterThan(1)
+  const allTiles = page.getByRole('region', { name: 'Stock heatmap grid' }).getByRole('link')
+  const allTileCount = await allTiles.count()
+  await sector.selectOption({ index: 1 })
+  await expect(sector).toHaveValue(/.+/)
+  const filteredTileCount = await page.getByRole('region', { name: 'Stock heatmap grid' }).getByRole('link').count()
+  expect(filteredTileCount).toBeGreaterThan(0)
+  expect(filteredTileCount).toBeLessThanOrEqual(allTileCount)
+  await page.getByRole('region', { name: 'Stock heatmap grid' }).getByRole('link').first().click()
+  await expect(page).toHaveURL(/\/stocks\/[A-Z0-9]+$/)
+
+  await page.goto('/screener', { waitUntil: 'networkidle' })
+  const priceSort = page.getByRole('button', { name: /^Price/ })
+  await priceSort.click()
+  await expect(page).toHaveURL(/sort_by=price.*sort_order=asc/)
+  await priceSort.click()
+  await expect(page).toHaveURL(/sort_by=price.*sort_order=desc/)
+  observed.assertClean()
+})
+
 test('SYNBANKA exposes populated technical-analysis controls and provenance', async ({ page }) => {
   const observed = diagnostics(page)
   await page.goto('/stocks/SYNBANKA', { waitUntil: 'networkidle' })
